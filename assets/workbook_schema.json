@@ -1,0 +1,42 @@
+{
+  "arquivo_origem": "em construção.xlsm",
+  "app": "Projeto Shinken iOS",
+  "jc_padrao": "Johrei Center Betim",
+  "abas": {
+    "BD_Pessoas": {
+      "registros_detectados": 86,
+      "colunas": ["IDPessoa", "Nome", "TipoPessoaAtual", "PrimeiraPresenca", "UltimaPresenca", "QtdPresencas", "JC"],
+      "destino_app": "Pessoas"
+    },
+    "BD_Frequencia": {
+      "registros_detectados": 472,
+      "colunas": ["id", "Data", "TipoEvento", "Nome", "TipoPessoaInformado", "TipoPessoaAtual", "JC", "Observacao", "DataLancamento", "Horalancamento"],
+      "destino_app": "Frequência"
+    },
+    "BD_Donativos": {
+      "registros_detectados": 218,
+      "colunas": ["ID", "Data", "Nome", "JC", "TipoPessoa", "TipoDonativo", "TipoDonativoManual", "Origem", "Subtipo", "Valor", "Comprovante", "TipoOrigemNome", "IdReferencia"],
+      "destino_app": "Donativos"
+    },
+    "BD_ExperienciaFe": {
+      "registros_detectados": 0,
+      "colunas": ["ID", "DataRegistro", "DataExperiencia", "IDPessoa", "Nome", "TipoPessoa", "JC", "Titulo", "Resumo", "Categoria", "Tema", "Status", "ResponsavelRegistro", "Observacao", "Arquivo", "FoiEnviada", "DataEnvio", "Aprovada", "FoiApresentada", "DataApresentacao", "LocalApresentacao", "DataLancamento", "HoraLancamento"],
+      "destino_app": "Experiência de Fé"
+    },
+    "BD_OnlineIdentificacao": {
+      "registros_detectados": 0,
+      "colunas": ["ID", "DataReferencia", "Nome", "IDPessoa", "TipoPessoa", "FormaIdentificacao", "Observacao", "JC", "DataLancamento", "HoraLancamento"],
+      "destino_app": "Identificação Online"
+    },
+    "BD_Referencias": {
+      "registros_detectados": 7,
+      "colunas": ["IDReferencia", "NomeReferencia", "TipoReferencia", "IDPessoaVinculada", "NomePessoaVinculada", "JC", "Observacao", "Ativo", "DataCadastro", "HoraCadastro"],
+      "destino_app": "Referências"
+    }
+  },
+  "observacoes": [
+    "O app não executa VBA. As regras precisam ser recriadas em Dart.",
+    "O protótipo usa SharedPreferences para persistência local simples.",
+    "Para produção, migrar para SQLite/Drift ou Supabase/Firebase conforme necessidade de multiusuário."
+  ]
+}

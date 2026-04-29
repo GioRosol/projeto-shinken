@@ -1,0 +1,25 @@
+name: projeto_shinken_ios
+version: 0.1.0+1
+publish_to: 'none'
+description: Protótipo Flutter iOS baseado no arquivo Excel em construção.xlsm.
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  shared_preferences: ^2.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/workbook_schema.json
+    - assets/seed_data.json
