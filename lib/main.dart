@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const kJcPadrao = 'Johrei Center Betim';
 const kAccent = Color(0xFF1B5E20);
@@ -29,8 +30,11 @@ const kTiposPessoaDonativo = ['Membro', 'Frequentador', 'Outro'];
 const kTiposPessoaFrequencia = ['Membro', 'Frequentador', '1ª vez'];
 const kTiposDonativo = ['Mensal', 'Diário', 'Construção', 'Prece', 'Reconsagração', 'Revista', 'Sorei Saishi', 'Outro'];
 const kOrigensDonativo = ['Urna', 'Transferência', 'Online'];
+const kSubtipoOnlineOficial = 'Oficial acumulado';
+const kSubtipoOnlineIdentificado = 'Identificado';
 const kTiposOrigemNomeDonativo = ['Pessoa', 'Referencia'];
 const kTiposEventoPadrao = ['Dia a dia', 'Culto Mensal', 'Oração pela Construção do Paraíso no Lar'];
+const kBancosTransferencia = ['Itaú', 'Banco do Brasil', 'Bradesco'];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -104,6 +108,42 @@ class _ProjetoShinkenAppState extends State<ProjetoShinkenApp> {
   }
 }
 
+class IgrejaLogo extends StatelessWidget {
+  const IgrejaLogo({super.key, this.height = 54});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      'assets/logo_igreja_messianica.png',
+      height: height,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => Text(
+        'Igreja Messiânica Mundial do Brasil',
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+}
+
+
+class IgrejaLogoCentral extends StatelessWidget {
+  const IgrejaLogoCentral({super.key, this.height = 128});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Image.asset(
+        'assets/logo_igreja_messianica_central.png',
+        height: height,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const IgrejaLogo(height: 72),
+      ),
+    );
+  }
+}
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.store});
   final AppStore store;
@@ -157,14 +197,15 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const CircleAvatar(
-                    radius: 28,
-                    backgroundColor: kSoftGreen,
-                    child: Icon(Icons.lock_outline, color: kAccent, size: 30),
+                  const IgrejaLogoCentral(height: 130),
+                  const SizedBox(height: 10),
+                  const Center(
+                    child: Text(
+                      kJcPadrao,
+                      style: TextStyle(fontWeight: FontWeight.w800, color: kAccent),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  Text('Projeto Shinken', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 14),
                   const Text('Entre para acessar os dados no Supabase.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
                   const SizedBox(height: 24),
                   TextField(
@@ -232,12 +273,17 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 82,
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Projeto Shinken', style: TextStyle(fontWeight: FontWeight.w800)),
+            IgrejaLogo(height: 44),
             SizedBox(height: 2),
-            Text(kJcPadrao, style: TextStyle(fontSize: 12, color: Colors.black54)),
+            Text(
+              kJcPadrao,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kAccent),
+            ),
           ],
         ),
       ),
@@ -271,6 +317,8 @@ class DashboardPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const SectionTitle(kJcPadrao),
+        const SizedBox(height: 8),
         const SectionTitle('Visão geral'),
         GridView.count(
           crossAxisCount: MediaQuery.sizeOf(context).width > 700 ? 4 : 2,
@@ -412,6 +460,7 @@ class _DonativosPageState extends State<DonativosPage> {
     final totalFiltrado = widget.store.totalizarDonativos(dados);
     final resumoDecendios = widget.store.resumirDecendios(dados);
     final largura = MediaQuery.sizeOf(context).width;
+    final temOnlineIdentificado = dados.any((item) => item.ehOnlineIdentificado);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -491,6 +540,18 @@ class _DonativosPageState extends State<DonativosPage> {
             SummaryStatTile(icon: Icons.date_range_outlined, title: 'Período', value: formatPeriodo(dataInicial, dataFinal), subtitle: 'Filtro aplicado'),
           ],
         ),
+        if (temOnlineIdentificado) ...[
+          const SizedBox(height: 12),
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Online identificado aparece na lista e no histórico da pessoa, mas não entra no total oficial para evitar duplicidade.',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         const SectionTitle('Totais por decêndio'),
         Wrap(
@@ -513,6 +574,12 @@ class _DonativosPageState extends State<DonativosPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('${brDate.format(item.data)} • ${item.tipoDonativoExibicao} • ${item.origem} • ${item.subtipo}'),
+                  if (item.origem == 'Transferência' && item.banco.trim().isNotEmpty)
+                    Text('Banco: ${item.banco}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  if (item.ehOnlineOficial)
+                    const Text('Online oficial: entra nos totais pelo acumulado.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  if (item.ehOnlineIdentificado)
+                    const Text('Online identificado: histórico pessoal, sem somar no oficial.', style: TextStyle(fontSize: 12, color: Colors.black54)),
                   if (item.temComprovante) ...[
                     const SizedBox(height: 4),
                     Text('📎 ${item.nomeComprovante}', style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600)),
@@ -641,7 +708,7 @@ class _FrequenciaPageState extends State<FrequenciaPage> {
   }
 
   Future<void> abrirNovo() async {
-    await openSheet(context, FrequenciaForm(store: widget.store));
+    await openSheet(context, FrequenciaContinuaPage(store: widget.store));
   }
 
   Future<void> abrirEdicao(Frequencia item) async {
@@ -867,6 +934,12 @@ class MaisPage extends StatelessWidget {
       children: [
         const SectionTitle('Outros módulos'),
         MenuTile(
+          icon: Icons.account_balance_outlined,
+          title: 'Depósito JC',
+          subtitle: 'Transferências pendentes para lançar no site.',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DepositoJcPage(store: store))),
+        ),
+        MenuTile(
           icon: Icons.auto_stories,
           title: 'Experiência de Fé',
           subtitle: '${store.experiencias.length} registro(s)',
@@ -880,8 +953,8 @@ class MaisPage extends StatelessWidget {
         ),
         MenuTile(
           icon: Icons.alternate_email,
-          title: 'Identificação Online',
-          subtitle: '${store.onlineIdentificacoes.length} identificação(ões)',
+          title: 'Online',
+          subtitle: 'Oficial acumulado e identificados',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OnlinePage(store: store))),
         ),
         MenuTile(
@@ -891,6 +964,302 @@ class MaisPage extends StatelessWidget {
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ConfigPage(store: store))),
         ),
       ],
+    );
+  }
+}
+
+class DepositoJcPage extends StatefulWidget {
+  const DepositoJcPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<DepositoJcPage> createState() => _DepositoJcPageState();
+}
+
+class _DepositoJcPageState extends State<DepositoJcPage> {
+  bool mostrarLancados = false;
+
+  List<Donativo> get dados {
+    final lista = widget.store.donativos.where((item) {
+      if (item.origem != 'Transferência') return false;
+      return mostrarLancados ? item.depositoLancado : !item.depositoLancado;
+    }).toList();
+    lista.sort((a, b) => b.data.compareTo(a.data));
+    return lista;
+  }
+
+  Future<void> copiar(String rotulo, String valor) async {
+    final texto = valor.trim().isEmpty ? 'Não informado' : valor.trim();
+    await Clipboard.setData(ClipboardData(text: texto));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$rotulo copiado.')));
+  }
+
+  Future<void> visualizarComprovante(Donativo item) async {
+    final arquivo = item.comprovanteArquivo;
+    if (arquivo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este lançamento não tem comprovante anexado.')));
+      return;
+    }
+
+    try {
+      final link = await widget.store.criarLinkTemporarioComprovante(item);
+      if (link == null || link.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Este lançamento não tem comprovante disponível na nuvem.')));
+        return;
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => ComprovantePreviewDialog(
+          arquivo: arquivo,
+          link: link,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    }
+  }
+
+  Future<void> alternarStatus(Donativo item) async {
+    await widget.store.marcarDepositoJc(item.id, lancado: !item.depositoLancado);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(item.depositoLancado ? 'Transferência voltou para pendente.' : 'Transferência marcada como lançada.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lista = dados;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Depósito JC')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const SectionTitle('Transferências para lançar'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Use os botões para copiar banco, data e valor separadamente e colar no depositojc.messianica.org.br. O comprovante abre em uma visualização rápida para conferência.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: mostrarLancados,
+                    title: const Text('Mostrar já lançados'),
+                    onChanged: (v) => setState(() => mostrarLancados = v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final item in lista)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.account_balance, color: kAccent)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.nome.isEmpty ? 'Sem nome' : item.nome, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                              const SizedBox(height: 4),
+                              Text('${brDate.format(item.data)} • ${brMoney.format(item.valor)}', style: const TextStyle(color: Colors.black54)),
+                              Text('Banco: ${item.banco.trim().isEmpty ? 'Não informado' : item.banco}', style: const TextStyle(color: Colors.black54)),
+                              if (item.temComprovante) Text('Comprovante: ${item.nomeComprovante}', style: const TextStyle(color: Colors.black54)),
+                            ],
+                          ),
+                        ),
+                        Chip(label: Text(item.depositoStatus)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => copiar('Banco', item.banco),
+                          icon: const Icon(Icons.copy, size: 18),
+                          label: const Text('Copiar banco'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => copiar('Data', brDate.format(item.data)),
+                          icon: const Icon(Icons.copy, size: 18),
+                          label: const Text('Copiar data'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => copiar('Valor', brMoneyInput.format(item.valor).trim()),
+                          icon: const Icon(Icons.copy, size: 18),
+                          label: const Text('Copiar valor'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: item.temComprovante ? () => visualizarComprovante(item) : null,
+                          icon: const Icon(Icons.visibility_outlined, size: 18),
+                          label: const Text('Ver comprovante'),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () => alternarStatus(item),
+                          icon: Icon(item.depositoLancado ? Icons.undo : Icons.check_circle_outline),
+                          label: Text(item.depositoLancado ? 'Voltar para pendente' : 'Marcar lançado'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          EmptyState(show: lista.isEmpty, message: mostrarLancados ? 'Nenhuma transferência lançada.' : 'Nenhuma transferência pendente.'),
+        ],
+      ),
+    );
+  }
+}
+
+class ComprovantePreviewDialog extends StatelessWidget {
+  const ComprovantePreviewDialog({super.key, required this.arquivo, required this.link});
+
+  final ComprovanteArquivo arquivo;
+  final String link;
+
+  bool get _ehImagem {
+    final ext = arquivo.extensao.toLowerCase().replaceAll('.', '').trim();
+    return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'].contains(ext) || contentTypeForFile(arquivo.nome).startsWith('image/');
+  }
+
+  Future<void> _abrirEmNovaAba(BuildContext context) async {
+    final abriu = await launchUrl(Uri.parse(link), webOnlyWindowName: '_blank');
+    if (!abriu && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível abrir o comprovante em nova aba.')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 760,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.receipt_long, color: kAccent)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Comprovante', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                        Text(arquivo.nome, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Fechar',
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: _ehImagem
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          color: Colors.black.withOpacity(0.04),
+                          child: InteractiveViewer(
+                            minScale: 0.5,
+                            maxScale: 5,
+                            child: Center(
+                              child: Image.network(
+                                link,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return const Padding(
+                                    padding: EdgeInsets.all(24),
+                                    child: CircularProgressIndicator(),
+                                  );
+                                },
+                                errorBuilder: (_, __, ___) => const Padding(
+                                  padding: EdgeInsets.all(24),
+                                  child: Text('Não foi possível carregar a pré-visualização.'),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.picture_as_pdf_outlined, size: 64, color: kAccent),
+                            const SizedBox(height: 12),
+                            Text(arquivo.nome, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Este tipo de arquivo abre melhor em uma nova aba.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Fechar'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _abrirEmNovaAba(context),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('Abrir em nova aba'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -963,30 +1332,449 @@ class OnlinePage extends StatelessWidget {
   const OnlinePage({super.key, required this.store});
   final AppStore store;
 
+  Future<void> _confirmarExclusao(BuildContext context, Donativo item) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir registro online?'),
+        content: Text('Deseja excluir ${item.ehOnlineOficial ? 'o acumulado oficial' : item.nome} de ${brDate.format(item.data)}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Excluir')),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+    await store.deleteDonativo(item.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registro online excluído.')));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final oficiais = store.donativos.where((item) => item.ehOnlineOficial).toList()
+      ..sort((a, b) => b.data.compareTo(a.data));
+    final identificados = store.donativos.where((item) => item.ehOnlineIdentificado).toList()
+      ..sort((a, b) => b.data.compareTo(a.data));
+    final agora = DateTime.now();
+    final onlineOficialMes = store.totalOnlineOficialMes(agora);
+    final onlineIdentificadoMes = store.totalOnlineIdentificadoMes(agora);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Identificação Online')),
+      appBar: AppBar(title: const Text('Online')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          HeaderWithAction(
-            title: 'Identificação Online',
-            subtitle: 'Controle separado do app/online, sem misturar com urna.',
-            buttonLabel: 'Nova',
-            onPressed: () => openSheet(context, OnlineForm(store: store)),
+          const SectionTitle('Online'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Controle limpo do Online', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Use “Oficial acumulado” para o valor que vem do site da Igreja. Use “Identificado” quando a pessoa mandar comprovante. O identificado não soma no total oficial para evitar duplicidade.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () => openSheet(context, OnlineOficialForm(store: store)),
+                        icon: const Icon(Icons.add_chart_outlined),
+                        label: const Text('Oficial acumulado'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => openSheet(context, OnlineIdentificadoForm(store: store)),
+                        icon: const Icon(Icons.person_add_alt_outlined),
+                        label: const Text('Online identificado'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-          for (final o in store.onlineIdentificacoes)
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SummaryStatTile(
+                icon: Icons.public_outlined,
+                title: 'Online oficial/mês',
+                value: brMoney.format(onlineOficialMes),
+                subtitle: 'Soma nos totais',
+              ),
+              SummaryStatTile(
+                icon: Icons.badge_outlined,
+                title: 'Identificado/mês',
+                value: brMoney.format(onlineIdentificadoMes),
+                subtitle: 'Só histórico pessoal',
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const SectionTitle('Oficial acumulado do site'),
+          for (final item in oficiais)
+            Card(
+              child: ListTile(
+                leading: const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.trending_up, color: kAccent)),
+                title: Text(brMoney.format(item.valor), style: const TextStyle(fontWeight: FontWeight.w900)),
+                subtitle: Text('${brDate.format(item.data)} • acumulado oficial do mês'),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'excluir') await _confirmarExclusao(context, item);
+                  },
+                  itemBuilder: (context) => const [PopupMenuItem(value: 'excluir', child: Text('Excluir'))],
+                ),
+              ),
+            ),
+          EmptyState(show: oficiais.isEmpty, message: 'Nenhum valor oficial acumulado cadastrado.'),
+          const SizedBox(height: 20),
+          const SectionTitle('Online identificado'),
+          for (final item in identificados)
             Card(
               child: ListTile(
                 leading: const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.alternate_email, color: kAccent)),
-                title: Text(o.nome, style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('${brDate.format(o.dataReferencia)} • ${o.formaIdentificacao}'),
+                title: Text(item.nome.isEmpty ? 'Sem nome' : item.nome, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${brDate.format(item.data)} • ${brMoney.format(item.valor)} • não soma no oficial'),
+                    if (item.temComprovante) Text('📎 ${item.nomeComprovante}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  ],
+                ),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'excluir') await _confirmarExclusao(context, item);
+                  },
+                  itemBuilder: (context) => const [PopupMenuItem(value: 'excluir', child: Text('Excluir'))],
+                ),
               ),
             ),
-          EmptyState(show: store.onlineIdentificacoes.isEmpty, message: 'Nenhuma identificação online cadastrada.'),
+          EmptyState(show: identificados.isEmpty, message: 'Nenhum online identificado cadastrado.'),
         ],
       ),
+    );
+  }
+}
+
+class OnlineOficialForm extends StatefulWidget {
+  const OnlineOficialForm({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<OnlineOficialForm> createState() => _OnlineOficialFormState();
+}
+
+class _OnlineOficialFormState extends State<OnlineOficialForm> {
+  final formKey = GlobalKey<FormState>();
+  final dataController = TextEditingController(text: brDate.format(DateTime.now()));
+  final valor = TextEditingController();
+
+  @override
+  void dispose() {
+    dataController.dispose();
+    valor.dispose();
+    super.dispose();
+  }
+
+  Future<void> selecionarData() async {
+    final atual = tryParseBrDate(dataController.text) ?? DateTime.now();
+    final selecionada = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDate: atual,
+    );
+    if (selecionada == null) return;
+    setState(() => dataController.text = brDate.format(selecionada));
+  }
+
+  Future<void> salvar() async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate()) return;
+    final data = tryParseBrDate(dataController.text)!;
+
+    await widget.store.upsertDonativo(Donativo(
+      id: widget.store.nextDonativoId(),
+      data: data,
+      nome: 'Online oficial acumulado',
+      jc: kJcPadrao,
+      tipoPessoa: 'Outro',
+      tipoDonativo: 'Mensal',
+      tipoDonativoManual: '',
+      origem: 'Online',
+      subtipo: kSubtipoOnlineOficial,
+      banco: '',
+      valor: parseValor(valor.text),
+      comprovante: '',
+      tipoOrigemNome: 'Referencia',
+      idReferencia: '',
+      depositoStatus: '',
+      depositoLancadoEm: null,
+    ));
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FormScaffold(
+      title: 'Online oficial acumulado',
+      formKey: formKey,
+      onSave: salvar,
+      children: [
+        const Text(
+          'Lance aqui o valor acumulado que aparece no site da Igreja. Esse é o valor que entra nos totais oficiais.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 16),
+        BrDateFormField(controller: dataController, labelText: 'Data da consulta', onPickDate: selecionarData),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: valor,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [BrMoneyTextInputFormatter()],
+          decoration: const InputDecoration(labelText: 'Valor acumulado no site', hintText: '0,00', prefixText: 'R\$ '),
+          validator: (value) => parseValor(value ?? '') <= 0 ? 'Informe o valor acumulado.' : null,
+        ),
+      ],
+    );
+  }
+}
+
+class OnlineIdentificadoForm extends StatefulWidget {
+  const OnlineIdentificadoForm({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<OnlineIdentificadoForm> createState() => _OnlineIdentificadoFormState();
+}
+
+class _OnlineIdentificadoFormState extends State<OnlineIdentificadoForm> {
+  final formKey = GlobalKey<FormState>();
+  final dataController = TextEditingController(text: brDate.format(DateTime.now()));
+  final nome = TextEditingController();
+  final valor = TextEditingController();
+  final tipoManual = TextEditingController();
+  String tipoPessoa = 'Membro';
+  String tipoDonativo = 'Mensal';
+  ComprovanteArquivo? comprovanteAtual;
+
+  @override
+  void dispose() {
+    dataController.dispose();
+    nome.dispose();
+    valor.dispose();
+    tipoManual.dispose();
+    super.dispose();
+  }
+
+  Future<void> selecionarData() async {
+    final atual = tryParseBrDate(dataController.text) ?? DateTime.now();
+    final selecionada = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDate: atual,
+    );
+    if (selecionada == null) return;
+    setState(() => dataController.text = brDate.format(selecionada));
+  }
+
+  Future<void> selecionarPessoa() async {
+    final selecionado = await pickStringFromList(context, title: 'Selecionar pessoa', options: widget.store.nomesPessoas());
+    if (selecionado == null) return;
+    setState(() {
+      nome.text = selecionado;
+      preencherCategoria(selecionado);
+    });
+  }
+
+  void preencherCategoria(String raw) {
+    final pessoa = widget.store.findPessoaByName(raw);
+    if (pessoa != null) tipoPessoa = valorSeguro(pessoa.tipoPessoaAtual, kTiposPessoaDonativo, fallback: 'Membro');
+  }
+
+  Future<void> selecionarComprovante({required bool imagem}) async {
+    final resultado = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+      type: imagem ? FileType.image : FileType.custom,
+      allowedExtensions: imagem ? null : const ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'webp'],
+    );
+
+    if (resultado == null || resultado.files.isEmpty) return;
+    final arquivo = resultado.files.single;
+    final bytes = arquivo.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Não foi possível ler o arquivo selecionado.')));
+      return;
+    }
+
+    const limiteBytes = 3 * 1024 * 1024;
+    if (bytes.length > limiteBytes) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arquivo muito grande. Use comprovante até 3 MB.')));
+      return;
+    }
+
+    setState(() {
+      comprovanteAtual = ComprovanteArquivo(
+        nome: arquivo.name,
+        extensao: arquivo.extension ?? '',
+        tamanhoBytes: arquivo.size,
+        base64: base64Encode(bytes),
+        dataAnexo: DateTime.now(),
+        path: '',
+      );
+    });
+  }
+
+  Future<void> tirarFotoComprovante() async {
+    try {
+      final picker = ImagePicker();
+      final foto = await picker.pickImage(source: ImageSource.camera, imageQuality: 82, maxWidth: 1600);
+      if (foto == null) return;
+      final bytes = await foto.readAsBytes();
+      if (bytes.isEmpty) return;
+
+      const limiteBytes = 3 * 1024 * 1024;
+      if (bytes.length > limiteBytes) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto muito grande. Tire novamente ou use arquivo até 3 MB.')));
+        return;
+      }
+
+      final nomeArquivo = foto.name.trim().isEmpty ? 'online_${DateTime.now().millisecondsSinceEpoch}.jpg' : foto.name;
+      setState(() {
+        comprovanteAtual = ComprovanteArquivo(
+          nome: nomeArquivo,
+          extensao: extensaoArquivo(nomeArquivo, fallback: 'jpg'),
+          tamanhoBytes: bytes.length,
+          base64: base64Encode(bytes),
+          dataAnexo: DateTime.now(),
+          path: '',
+        );
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Não foi possível abrir a câmera: ${limparMensagemErro(error)}')));
+    }
+  }
+
+  Future<void> salvar() async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate()) return;
+
+    final data = tryParseBrDate(dataController.text)!;
+    final pessoa = widget.store.findPessoaByName(nome.text);
+    final novoId = widget.store.nextDonativoId();
+    var comprovanteFinal = '';
+
+    if (comprovanteAtual != null) {
+      comprovanteFinal = await widget.store.salvarComprovanteNoSupabase(donativoId: novoId, comprovante: comprovanteAtual!);
+    }
+
+    await widget.store.upsertDonativo(Donativo(
+      id: novoId,
+      data: data,
+      nome: nome.text.trim(),
+      jc: kJcPadrao,
+      tipoPessoa: pessoa?.tipoPessoaAtual ?? tipoPessoa,
+      tipoDonativo: tipoDonativo,
+      tipoDonativoManual: tipoDonativo == 'Outro' ? tipoManual.text.trim() : '',
+      origem: 'Online',
+      subtipo: kSubtipoOnlineIdentificado,
+      banco: '',
+      valor: parseValor(valor.text),
+      comprovante: comprovanteFinal,
+      tipoOrigemNome: 'Pessoa',
+      idReferencia: '',
+      depositoStatus: '',
+      depositoLancadoEm: null,
+    ));
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FormScaffold(
+      title: 'Online identificado',
+      formKey: formKey,
+      onSave: salvar,
+      children: [
+        const Text(
+          'Use quando alguém fizer donativo online e mandar comprovante. Este valor fica no histórico da pessoa, mas não soma no total oficial.',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 16),
+        BrDateFormField(controller: dataController, labelText: 'Data do donativo', onPickDate: selecionarData),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: nome,
+          decoration: InputDecoration(
+            labelText: 'Nome da pessoa',
+            suffixIcon: IconButton(
+              onPressed: widget.store.pessoas.isEmpty ? null : selecionarPessoa,
+              icon: const Icon(Icons.search),
+              tooltip: 'Selecionar da base',
+            ),
+          ),
+          onChanged: (value) => setState(() => preencherCategoria(value)),
+          validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o nome.' : null,
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: widget.store.pessoas.isEmpty ? null : selecionarPessoa,
+          icon: const Icon(Icons.list_alt_outlined),
+          label: Text('Selecionar da base de pessoas (${widget.store.pessoas.length})'),
+        ),
+        const SizedBox(height: 12),
+        AppDropdown(value: tipoPessoa, labelText: 'Categoria da pessoa', items: kTiposPessoaDonativo, onChanged: (v) => setState(() => tipoPessoa = v)),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: valor,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [BrMoneyTextInputFormatter()],
+          decoration: const InputDecoration(labelText: 'Valor informado', hintText: '0,00', prefixText: 'R\$ '),
+          validator: (value) => parseValor(value ?? '') <= 0 ? 'Informe o valor.' : null,
+        ),
+        const SizedBox(height: 12),
+        AppDropdown(value: tipoDonativo, labelText: 'Tipo de donativo', items: kTiposDonativo, onChanged: (v) => setState(() => tipoDonativo = v)),
+        if (tipoDonativo == 'Outro') ...[
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: tipoManual,
+            decoration: const InputDecoration(labelText: 'Tipo manual'),
+            validator: (value) {
+              if (tipoDonativo == 'Outro' && (value?.trim().isEmpty ?? true)) return 'Informe o tipo manual.';
+              return null;
+            },
+          ),
+        ],
+        const SizedBox(height: 20),
+        ComprovantePickerCard(
+          titulo: 'Comprovante online',
+          descricao: 'Anexe o comprovante que a pessoa mandou pelo WhatsApp, Fotos ou Arquivos.',
+          comprovante: comprovanteAtual,
+          onTakePhoto: tirarFotoComprovante,
+          onPickImage: () => selecionarComprovante(imagem: true),
+          onPickFile: () => selecionarComprovante(imagem: false),
+          onRemove: comprovanteAtual == null ? null : () => setState(() => comprovanteAtual = null),
+        ),
+      ],
     );
   }
 }
@@ -1145,6 +1933,7 @@ class _PessoaFormState extends State<PessoaForm> {
   }
 }
 
+
 class DonativoForm extends StatefulWidget {
   const DonativoForm({super.key, required this.store, this.initialValue});
   final AppStore store;
@@ -1163,14 +1952,25 @@ class _DonativoFormState extends State<DonativoForm> {
   final tipoManual = TextEditingController();
   final dataController = TextEditingController();
 
+  String origem = 'Urna';
   String tipoPessoa = 'Membro';
   String tipoDonativo = 'Mensal';
-  String origem = 'Urna';
   String subtipo = 'Presencial';
   String tipoOrigemNome = 'Pessoa';
+  String bancoSelecionado = kBancosTransferencia.first;
   ComprovanteArquivo? comprovanteAtual;
 
-  List<String> get subtiposDisponiveis => subtiposPorOrigem(origem);
+  bool get ehUrna => origem == 'Urna';
+  bool get ehTransferencia => origem == 'Transferência';
+  bool get ehOnline => origem == 'Online';
+  bool get ehOnlineOficial => ehOnline && subtipo == kSubtipoOnlineOficial;
+  bool get ehOnlineIdentificado => ehOnline && subtipo == kSubtipoOnlineIdentificado;
+  bool get exigePessoa => !ehOnlineOficial;
+  bool get permiteComprovante => ehTransferencia || ehOnlineIdentificado;
+
+  List<String> get subtiposDisponiveis => ehOnline
+      ? const [kSubtipoOnlineOficial, kSubtipoOnlineIdentificado]
+      : subtiposPorOrigem(origem);
   List<String> get nomesBase => tipoOrigemNome == 'Pessoa' ? widget.store.nomesPessoas() : widget.store.nomesReferencias();
 
   @override
@@ -1178,16 +1978,22 @@ class _DonativoFormState extends State<DonativoForm> {
     super.initState();
     final item = widget.initialValue;
     final dataInicial = item?.data ?? DateTime.now();
-    nome.text = item?.nome ?? '';
+
+    origem = valorSeguro(item?.origem, kOrigensDonativo, fallback: 'Urna');
+    subtipo = valorSeguro(item?.subtipo, subtiposDisponiveis, fallback: subtiposDisponiveis.first);
+    nome.text = item?.ehOnlineOficial == true ? '' : (item?.nome ?? '');
     valor.text = item == null ? '' : formatValorInput(item.valor);
     tipoManual.text = item?.tipoDonativoManual ?? '';
+    bancoSelecionado = valorSeguro(item?.banco, kBancosTransferencia, fallback: kBancosTransferencia.first);
     dataController.text = brDate.format(dataInicial);
     tipoPessoa = valorSeguro(item?.tipoPessoa, kTiposPessoaDonativo, fallback: 'Membro');
     tipoDonativo = valorSeguro(item?.tipoDonativo, kTiposDonativo, fallback: 'Mensal');
-    origem = valorSeguro(item?.origem, kOrigensDonativo, fallback: 'Urna');
     tipoOrigemNome = valorSeguro(item?.tipoOrigemNome, kTiposOrigemNomeDonativo, fallback: 'Pessoa');
-    subtipo = valorSeguro(item?.subtipo, subtiposDisponiveis, fallback: subtiposDisponiveis.first);
     comprovanteAtual = ComprovanteArquivo.fromStorageString(item?.comprovante ?? '');
+
+    if (ehOnline && !subtiposDisponiveis.contains(subtipo)) {
+      subtipo = kSubtipoOnlineOficial;
+    }
     if (tipoOrigemNome == 'Referencia') tipoPessoa = 'Outro';
   }
 
@@ -1198,6 +2004,23 @@ class _DonativoFormState extends State<DonativoForm> {
     tipoManual.dispose();
     dataController.dispose();
     super.dispose();
+  }
+
+  void alterarOrigem(String novaOrigem) {
+    setState(() {
+      origem = novaOrigem;
+      subtipo = subtiposPorOrigem(origem).first;
+      if (origem == 'Online') {
+        subtipo = kSubtipoOnlineOficial;
+        tipoOrigemNome = 'Pessoa';
+        tipoPessoa = 'Membro';
+        nome.clear();
+        comprovanteAtual = null;
+      }
+      if (origem == 'Transferência') {
+        bancoSelecionado = kBancosTransferencia.first;
+      }
+    });
   }
 
   Future<void> selecionarData() async {
@@ -1335,51 +2158,95 @@ class _DonativoFormState extends State<DonativoForm> {
     if (form == null || !form.validate()) return;
 
     final dataLancamento = tryParseBrDate(dataController.text)!;
-    final referencia = tipoOrigemNome == 'Referencia' ? widget.store.findReferenciaByName(nome.text) : null;
-    final pessoa = tipoOrigemNome == 'Pessoa' ? widget.store.findPessoaByName(nome.text) : null;
+    final referencia = tipoOrigemNome == 'Referencia' && exigePessoa ? widget.store.findReferenciaByName(nome.text) : null;
+    final pessoa = tipoOrigemNome == 'Pessoa' && exigePessoa ? widget.store.findPessoaByName(nome.text) : null;
 
     final novoId = widget.initialValue?.id ?? widget.store.nextDonativoId();
     var comprovanteFinal = '';
-    if (origem == 'Transferência' && comprovanteAtual != null) {
+    if (permiteComprovante && comprovanteAtual != null) {
       comprovanteFinal = await widget.store.salvarComprovanteNoSupabase(
         donativoId: novoId,
         comprovante: comprovanteAtual!,
       );
     }
 
+    final nomeFinal = ehOnlineOficial ? 'Online oficial acumulado' : nome.text.trim();
+    final tipoOrigemFinal = ehOnlineOficial ? '' : tipoOrigemNome;
+    final tipoPessoaFinal = ehOnlineOficial
+        ? ''
+        : (tipoOrigemNome == 'Referencia' ? 'Outro' : (pessoa?.tipoPessoaAtual ?? tipoPessoa));
+
     final novo = Donativo(
       id: novoId,
       data: dataLancamento,
-      nome: nome.text.trim(),
+      nome: nomeFinal,
       jc: widget.initialValue?.jc ?? kJcPadrao,
-      tipoPessoa: tipoOrigemNome == 'Referencia' ? 'Outro' : (pessoa?.tipoPessoaAtual ?? tipoPessoa),
+      tipoPessoa: tipoPessoaFinal,
       tipoDonativo: tipoDonativo,
       tipoDonativoManual: tipoDonativo == 'Outro' ? tipoManual.text.trim() : '',
       origem: origem,
       subtipo: subtipo,
+      banco: ehTransferencia ? bancoSelecionado : '',
       valor: parseValor(valor.text),
       comprovante: comprovanteFinal,
-      tipoOrigemNome: tipoOrigemNome,
+      depositoStatus: ehTransferencia ? (widget.initialValue?.depositoStatus ?? 'Pendente') : '',
+      depositoLancadoEm: ehTransferencia ? widget.initialValue?.depositoLancadoEm : null,
+      tipoOrigemNome: tipoOrigemFinal,
       idReferencia: referencia?.idReferencia ?? widget.initialValue?.idReferencia ?? '',
     );
 
-    await widget.store.upsertDonativo(novo);
-    if (!mounted) return;
-    Navigator.pop(context, true);
+    try {
+      await widget.store.upsertDonativo(novo);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível salvar: ${limparMensagemErro(error)}')),
+      );
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return FormScaffold(
-      title: widget.isEditing ? 'Editar donativo' : 'Novo donativo',
-      formKey: formKey,
-      onSave: salvar,
+  Widget campoOrigem() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FormSectionLabel('Identificação'),
+        FormSectionLabel('Origem do donativo'),
+        AppDropdown(
+          value: origem,
+          labelText: 'Selecione como será lançado',
+          items: kOrigensDonativo,
+          onChanged: alterarOrigem,
+        ),
+        const SizedBox(height: 12),
+        if (ehOnline)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSoftGreen,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Text(
+              'Online oficial é o acumulado do site da Igreja. Online identificado serve para vincular pessoa e comprovante sem duplicar o total oficial.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget camposPessoa() {
+    if (!exigePessoa) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FormSectionLabel(ehOnlineIdentificado ? 'Pessoa identificada' : 'Identificação'),
         AppDropdown(
           value: tipoOrigemNome,
           labelText: 'Base do nome',
           items: kTiposOrigemNomeDonativo,
+          enabled: !ehOnlineIdentificado,
           onChanged: (v) {
             setState(() {
               tipoOrigemNome = v;
@@ -1404,6 +2271,7 @@ class _DonativoFormState extends State<DonativoForm> {
           ),
           onChanged: (value) => setState(() => preencherTipoPessoaPelaBase(value)),
           validator: (value) {
+            if (!exigePessoa) return null;
             final nomeLimpo = value?.trim() ?? '';
             if (nomeLimpo.isEmpty) return 'Informe um nome.';
             if (tipoOrigemNome == 'Referencia' && widget.store.findReferenciaByName(nomeLimpo) == null) {
@@ -1418,7 +2286,9 @@ class _DonativoFormState extends State<DonativoForm> {
           child: TextButton.icon(
             onPressed: nomesBase.isEmpty ? null : selecionarNomeDaBase,
             icon: const Icon(Icons.list_alt_outlined),
-            label: Text(tipoOrigemNome == 'Pessoa' ? 'Selecionar da base de pessoas (${widget.store.pessoas.length})' : 'Selecionar da base de referências (${widget.store.referencias.length})'),
+            label: Text(tipoOrigemNome == 'Pessoa'
+                ? 'Selecionar da base de pessoas (${widget.store.pessoas.length})'
+                : 'Selecionar da base de referências (${widget.store.referencias.length})'),
           ),
         ),
         const SizedBox(height: 12),
@@ -1430,14 +2300,30 @@ class _DonativoFormState extends State<DonativoForm> {
           onChanged: (v) => setState(() => tipoPessoa = v),
         ),
         const SizedBox(height: 20),
-        FormSectionLabel('Lançamento'),
-        BrDateFormField(controller: dataController, labelText: 'Data', onPickDate: selecionarData),
+      ],
+    );
+  }
+
+  Widget camposLancamento() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FormSectionLabel(ehOnlineOficial ? 'Acumulado oficial do site' : 'Dados do lançamento'),
+        BrDateFormField(
+          controller: dataController,
+          labelText: ehOnlineOficial ? 'Data da consulta' : 'Data',
+          onPickDate: selecionarData,
+        ),
         const SizedBox(height: 12),
         TextFormField(
           controller: valor,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [BrMoneyTextInputFormatter()],
-          decoration: const InputDecoration(labelText: 'Valor', hintText: '0,00', prefixText: 'R\$ '),
+          decoration: InputDecoration(
+            labelText: ehOnlineOficial ? 'Valor acumulado no site' : 'Valor',
+            hintText: '0,00',
+            prefixText: 'R\$ ',
+          ),
           validator: (value) {
             final atual = parseValor(value ?? '');
             if (atual <= 0) return 'Informe um valor maior que zero.';
@@ -1445,7 +2331,12 @@ class _DonativoFormState extends State<DonativoForm> {
           },
         ),
         const SizedBox(height: 12),
-        AppDropdown(value: tipoDonativo, labelText: 'Tipo de donativo', items: kTiposDonativo, onChanged: (v) => setState(() => tipoDonativo = v)),
+        AppDropdown(
+          value: tipoDonativo,
+          labelText: 'Tipo de donativo',
+          items: kTiposDonativo,
+          onChanged: (v) => setState(() => tipoDonativo = v),
+        ),
         if (tipoDonativo == 'Outro') ...[
           const SizedBox(height: 12),
           TextFormField(
@@ -1457,21 +2348,64 @@ class _DonativoFormState extends State<DonativoForm> {
             },
           ),
         ],
+      ],
+    );
+  }
+
+  Widget camposEspecificos() {
+    if (ehOnline) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+          AppDropdown(
+            value: subtipo,
+            labelText: 'Tipo de online',
+            items: const [kSubtipoOnlineOficial, kSubtipoOnlineIdentificado],
+            onChanged: (v) {
+              setState(() {
+                subtipo = v;
+                if (ehOnlineOficial) {
+                  nome.clear();
+                  comprovanteAtual = null;
+                }
+              });
+            },
+          ),
+          if (ehOnlineIdentificado) ...[
+            const SizedBox(height: 20),
+            camposPessoa(),
+            ComprovantePickerCard(
+              titulo: 'Comprovante online',
+              comprovante: comprovanteAtual,
+              onTakePhoto: tirarFotoComprovante,
+              onPickImage: () => selecionarComprovante(imagem: true),
+              onPickFile: () => selecionarComprovante(imagem: false),
+              onRemove: comprovanteAtual == null ? null : removerComprovante,
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         const SizedBox(height: 12),
         AppDropdown(
-          value: origem,
-          labelText: 'Origem',
-          items: kOrigensDonativo,
-          onChanged: (v) {
-            setState(() {
-              origem = v;
-              subtipo = subtiposPorOrigem(origem).first;
-            });
-          },
+          value: subtipo,
+          labelText: 'Subtipo',
+          items: subtiposDisponiveis,
+          onChanged: (v) => setState(() => subtipo = v),
         ),
-        const SizedBox(height: 12),
-        AppDropdown(value: subtipo, labelText: 'Subtipo', items: subtiposDisponiveis, onChanged: (v) => setState(() => subtipo = v)),
-        if (origem == 'Transferência') ...[
+        if (ehTransferencia) ...[
+          const SizedBox(height: 12),
+          AppDropdown(
+            value: bancoSelecionado,
+            labelText: 'Banco da transferência',
+            items: kBancosTransferencia,
+            onChanged: (v) => setState(() => bancoSelecionado = v),
+          ),
           const SizedBox(height: 20),
           ComprovantePickerCard(
             comprovante: comprovanteAtual,
@@ -1483,6 +2417,241 @@ class _DonativoFormState extends State<DonativoForm> {
         ],
       ],
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FormScaffold(
+      title: widget.isEditing ? 'Editar donativo' : 'Novo donativo',
+      formKey: formKey,
+      onSave: salvar,
+      children: [
+        campoOrigem(),
+        const SizedBox(height: 20),
+        if (!ehOnline) camposPessoa(),
+        camposLancamento(),
+        camposEspecificos(),
+      ],
+    );
+  }
+}
+
+class FrequenciaContinuaPage extends StatefulWidget {
+  const FrequenciaContinuaPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<FrequenciaContinuaPage> createState() => _FrequenciaContinuaPageState();
+}
+
+class _FrequenciaContinuaPageState extends State<FrequenciaContinuaPage> {
+  final formKey = GlobalKey<FormState>();
+  final nome = TextEditingController();
+  final obs = TextEditingController();
+  final dataController = TextEditingController(text: brDate.format(DateTime.now()));
+  final nomeFocus = FocusNode();
+  String tipoEvento = 'Dia a dia';
+  String tipoPessoa = 'Membro';
+  bool salvando = false;
+
+  List<String> get tiposEvento {
+    final set = <String>{...kTiposEventoPadrao, ...widget.store.frequencias.map((e) => e.tipoEvento).where((e) => e.trim().isNotEmpty)};
+    final lista = set.toList()..sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
+    return lista;
+  }
+
+  DateTime get dataSelecionada => tryParseBrDate(dataController.text) ?? DateTime.now();
+
+  List<Frequencia> get lancamentosDoDia {
+    final data = dateOnly(dataSelecionada);
+    final lista = widget.store.frequencias.where((item) => dateOnly(item.data) == data && item.tipoEvento == tipoEvento).toList();
+    lista.sort((a, b) => normalizeText(a.nome).compareTo(normalizeText(b.nome)));
+    return lista;
+  }
+
+  @override
+  void dispose() {
+    nome.dispose();
+    obs.dispose();
+    nomeFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> selecionarData() async {
+    final selecionada = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDate: dataSelecionada,
+    );
+    if (selecionada == null) return;
+    setState(() => dataController.text = brDate.format(selecionada));
+  }
+
+  Future<void> selecionarPessoa() async {
+    final selecionado = await pickStringFromList(context, title: 'Selecionar pessoa', options: widget.store.nomesPessoas());
+    if (selecionado == null) return;
+    setState(() {
+      nome.text = selecionado;
+      preencherCategoriaPelaBase(selecionado);
+    });
+    nomeFocus.requestFocus();
+  }
+
+  void preencherCategoriaPelaBase(String raw) {
+    final pessoa = widget.store.findPessoaByName(raw);
+    if (pessoa != null) tipoPessoa = valorSeguro(pessoa.tipoPessoaAtual, kTiposPessoaFrequencia, fallback: 'Membro');
+  }
+
+  Future<void> salvar({required bool continuar}) async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate() || salvando) return;
+
+    final data = tryParseBrDate(dataController.text)!;
+    final pessoa = widget.store.findPessoaByName(nome.text);
+    final categoriaHistorica = pessoa?.tipoPessoaAtual ?? tipoPessoa;
+    final nomeAtual = nome.text.trim();
+
+    final duplicado = widget.store.existeFrequenciaDuplicada(nome: nomeAtual, data: data, tipoEvento: tipoEvento);
+    if (duplicado) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Essa pessoa já foi lançada nesse dia e evento.')));
+      nomeFocus.requestFocus();
+      return;
+    }
+
+    setState(() => salvando = true);
+    try {
+      await widget.store.upsertFrequencia(Frequencia(
+        id: widget.store.nextFrequenciaId(),
+        data: data,
+        tipoEvento: tipoEvento,
+        nome: nomeAtual,
+        tipoPessoaInformado: categoriaHistorica,
+        tipoPessoaAtual: categoriaHistorica,
+        jc: kJcPadrao,
+        observacao: obs.text.trim(),
+        dataLancamento: DateTime.now(),
+        horaLancamento: TimeOfDay.now().format(context),
+      ));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$nomeAtual lançado.')));
+      if (!continuar) {
+        Navigator.pop(context);
+        return;
+      }
+      setState(() {
+        nome.clear();
+        obs.clear();
+        tipoPessoa = 'Membro';
+      });
+      nomeFocus.requestFocus();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    } finally {
+      if (mounted) setState(() => salvando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lancados = lancamentosDoDia;
+    return Material(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      clipBehavior: Clip.antiAlias,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Lançamento contínuo')),
+        body: Form(
+        key: formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Dados fixos do lançamento', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 12),
+                    BrDateFormField(controller: dataController, labelText: 'Data', onPickDate: selecionarData),
+                    const SizedBox(height: 12),
+                    AppDropdown(value: tipoEvento, labelText: 'Tipo de evento', items: tiposEvento, onChanged: (v) => setState(() => tipoEvento = v)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Adicionar pessoa', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      focusNode: nomeFocus,
+                      controller: nome,
+                      decoration: InputDecoration(
+                        labelText: 'Nome da pessoa',
+                        suffixIcon: IconButton(
+                          onPressed: widget.store.pessoas.isEmpty ? null : selecionarPessoa,
+                          icon: const Icon(Icons.search),
+                          tooltip: 'Selecionar da base',
+                        ),
+                      ),
+                      onChanged: (value) => setState(() => preencherCategoriaPelaBase(value)),
+                      validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o nome.' : null,
+                      onFieldSubmitted: (_) => salvar(continuar: true),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: widget.store.pessoas.isEmpty ? null : selecionarPessoa,
+                      icon: const Icon(Icons.list_alt_outlined),
+                      label: Text('Selecionar da base de pessoas (${widget.store.pessoas.length})'),
+                    ),
+                    const SizedBox(height: 12),
+                    AppDropdown(value: tipoPessoa, labelText: 'Categoria histórica', items: kTiposPessoaFrequencia, onChanged: (v) => setState(() => tipoPessoa = v)),
+                    const SizedBox(height: 12),
+                    TextFormField(controller: obs, decoration: const InputDecoration(labelText: 'Observação')), 
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: salvando ? null : () => salvar(continuar: true),
+                          icon: const Icon(Icons.add_task),
+                          label: const Text('Salvar e continuar'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: salvando ? null : () => salvar(continuar: false),
+                          icon: const Icon(Icons.check),
+                          label: const Text('Salvar e fechar'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SectionTitle('Lançados em ${brDate.format(dataSelecionada)} • $tipoEvento'),
+            for (final item in lancados)
+              Card(
+                child: ListTile(
+                  dense: true,
+                  leading: const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.person, color: kAccent)),
+                  title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text(item.tipoPessoaAtual),
+                ),
+              ),
+            EmptyState(show: lancados.isEmpty, message: 'Ainda não há presença lançada para essa data/evento.'),
+          ],
+        ),
+      ),
+    ),
+  );
   }
 }
 
@@ -1848,6 +3017,23 @@ class AppStore extends ChangeNotifier {
   }
 
 
+  Future<void> garantirBasePessoasReferenciasLocal() async {
+    if (pessoas.isNotEmpty && referencias.isNotEmpty) return;
+
+    final raw = await rootBundle.loadString('assets/seed_data.json');
+    final data = jsonDecode(raw) as Map<String, dynamic>;
+
+    if (pessoas.isEmpty) {
+      pessoas = _seedList(data, 'pessoas', Pessoa.fromJson);
+      await _saveRawList('pessoas', pessoas, (e) => e.toJson());
+    }
+
+    if (referencias.isEmpty) {
+      referencias = _seedList(data, 'referencias', ReferenciaNome.fromJson);
+      await _saveRawList('referencias', referencias, (e) => e.toJson());
+    }
+  }
+
   Future<void> login({required String email, required String senha}) async {
     final response = await supabase.auth.signInWithPassword(email: email, password: senha);
     if (response.session == null) {
@@ -1884,17 +3070,27 @@ class AppStore extends ChangeNotifier {
       final frequenciasRemote = rows(rawFrequencias).map(Frequencia.fromSupabase).toList();
 
       final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty;
-      if (!substituirSomenteSeHouverDados || remotoTemDados) {
+      if (!substituirSomenteSeHouverDados) {
         pessoas = pessoasRemote;
         referencias = referenciasRemote;
         donativos = donativosRemote;
         frequencias = frequenciasRemote;
-        await _saveRawList('pessoas', pessoas, (e) => e.toJson());
-        await _saveRawList('referencias', referencias, (e) => e.toJson());
-        await _saveRawList('donativos', donativos, (e) => e.toJson());
-        await _saveRawList('frequencias', frequencias, (e) => e.toJson());
+      } else if (remotoTemDados) {
+        if (pessoasRemote.isNotEmpty) pessoas = pessoasRemote;
+        if (referenciasRemote.isNotEmpty) referencias = referenciasRemote;
+        if (donativosRemote.isNotEmpty) donativos = donativosRemote;
+        if (frequenciasRemote.isNotEmpty) frequencias = frequenciasRemote;
       }
-      statusSupabase = remotoTemDados ? 'Dados carregados do Supabase' : 'Supabase conectado, mas ainda vazio';
+
+      if (pessoas.isEmpty || referencias.isEmpty) {
+        await garantirBasePessoasReferenciasLocal();
+      }
+
+      await _saveRawList('pessoas', pessoas, (e) => e.toJson());
+      await _saveRawList('referencias', referencias, (e) => e.toJson());
+      await _saveRawList('donativos', donativos, (e) => e.toJson());
+      await _saveRawList('frequencias', frequencias, (e) => e.toJson());
+      statusSupabase = remotoTemDados ? 'Dados carregados do Supabase' : 'Supabase conectado, mantendo base local';
     } catch (e) {
       statusSupabase = 'Erro no Supabase: ${limparMensagemErro(e)}';
       rethrow;
@@ -1996,6 +3192,24 @@ class AppStore extends ChangeNotifier {
     await _saveList('donativos', donativos, (e) => e.toJson());
   }
 
+  Future<void> marcarDepositoJc(int id, {required bool lancado}) async {
+    final index = donativos.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+
+    final atualizado = donativos[index].copyWith(
+      depositoStatus: lancado ? 'Lançado' : 'Pendente',
+      depositoLancadoEm: lancado ? DateTime.now() : null,
+      limparDepositoLancadoEm: !lancado,
+    );
+    await upsertDonativo(atualizado);
+  }
+
+  Future<String?> criarLinkTemporarioComprovante(Donativo item) async {
+    final path = item.comprovanteArquivo?.path ?? '';
+    if (path.isEmpty || !isAuthenticated) return null;
+    return supabase.storage.from(kComprovantesBucket).createSignedUrl(path, 60 * 10);
+  }
+
   Future<void> addFrequencia(Frequencia value) => upsertFrequencia(value);
 
   Future<void> upsertFrequencia(Frequencia value) async {
@@ -2084,20 +3298,75 @@ class AppStore extends ChangeNotifier {
     return frequencias.where((f) => f.data.year == date.year && f.data.month == date.month).length;
   }
 
+  double totalOnlineOficialMes(DateTime date) {
+    return _onlineAcumuladoAte(donativos, date.year, date.month, 31);
+  }
+
+  double totalOnlineIdentificadoMes(DateTime date) {
+    return donativos
+        .where((d) => d.ehOnlineIdentificado && d.data.year == date.year && d.data.month == date.month)
+        .fold(0.0, (sum, item) => sum + item.valor);
+  }
+
   double totalizarDonativos(Iterable<Donativo> values) {
-    return values.fold(0.0, (sum, item) => sum + item.valor);
+    final itens = values.toList();
+    final totalNormal = itens
+        .where((item) => item.origem != 'Online')
+        .fold(0.0, (sum, item) => sum + item.valor);
+    return totalNormal + _totalOnlineOficialAcumulado(itens);
+  }
+
+  double _totalOnlineOficialAcumulado(Iterable<Donativo> values) {
+    final itens = values.where((item) => item.ehOnlineOficial).toList();
+    final meses = <String>{for (final item in itens) '${item.data.year}-${item.data.month}'};
+    var total = 0.0;
+    for (final chave in meses) {
+      final partes = chave.split('-');
+      total += _onlineAcumuladoAte(itens, int.parse(partes[0]), int.parse(partes[1]), 31);
+    }
+    return total;
+  }
+
+  double _onlineAcumuladoAte(Iterable<Donativo> values, int ano, int mes, int diaLimite) {
+    final candidatos = values
+        .where((item) => item.ehOnlineOficial && item.data.year == ano && item.data.month == mes && item.data.day <= diaLimite)
+        .toList();
+    if (candidatos.isEmpty) return 0;
+    candidatos.sort((a, b) {
+      final byDate = b.data.compareTo(a.data);
+      if (byDate != 0) return byDate;
+      return b.id.compareTo(a.id);
+    });
+    return candidatos.first.valor;
   }
 
   List<DecendioResumo> resumirDecendios(Iterable<Donativo> values) {
     final ranges = [
-      (1, '1 a 10', 1, 10),
-      (2, '11 a 20', 11, 20),
-      (3, '21 ao fim do mês', 21, 31),
+      (1, '1 a 10', 1, 10, 0),
+      (2, '11 a 20', 11, 20, 10),
+      (3, '21 ao fim do mês', 21, 31, 20),
     ];
     final itens = values.toList();
+    final mesesOnline = <String>{for (final item in itens.where((e) => e.ehOnlineOficial)) '${item.data.year}-${item.data.month}'};
+
     return ranges.map((r) {
-      final dados = itens.where((item) => item.data.day >= r.$3 && item.data.day <= r.$4).toList();
-      return DecendioResumo(numero: r.$1, rotulo: r.$2, quantidade: dados.length, total: totalizarDonativos(dados));
+      final dadosNormais = itens.where((item) => item.origem != 'Online' && item.data.day >= r.$3 && item.data.day <= r.$4).toList();
+      var totalOnline = 0.0;
+      var qtdOnline = 0;
+      for (final chave in mesesOnline) {
+        final partes = chave.split('-');
+        final ano = int.parse(partes[0]);
+        final mes = int.parse(partes[1]);
+        final acumuladoAtual = _onlineAcumuladoAte(itens, ano, mes, r.$4);
+        final acumuladoAnterior = _onlineAcumuladoAte(itens, ano, mes, r.$5);
+        final diferenca = acumuladoAtual - acumuladoAnterior;
+        if (diferenca > 0) {
+          totalOnline += diferenca;
+          qtdOnline++;
+        }
+      }
+      final totalNormal = dadosNormais.fold(0.0, (sum, item) => sum + item.valor);
+      return DecendioResumo(numero: r.$1, rotulo: r.$2, quantidade: dadosNormais.length + qtdOnline, total: totalNormal + totalOnline);
     }).toList();
   }
 
@@ -2241,7 +3510,7 @@ class ComprovanteArquivo {
 }
 
 class Donativo {
-  Donativo({required this.id, required this.data, required this.nome, required this.jc, required this.tipoPessoa, required this.tipoDonativo, required this.tipoDonativoManual, required this.origem, required this.subtipo, required this.valor, required this.comprovante, required this.tipoOrigemNome, required this.idReferencia});
+  Donativo({required this.id, required this.data, required this.nome, required this.jc, required this.tipoPessoa, required this.tipoDonativo, required this.tipoDonativoManual, required this.origem, required this.subtipo, required this.banco, required this.valor, required this.comprovante, required this.tipoOrigemNome, required this.idReferencia, required this.depositoStatus, this.depositoLancadoEm});
   final int id;
   final DateTime data;
   final String nome;
@@ -2251,10 +3520,39 @@ class Donativo {
   final String tipoDonativoManual;
   final String origem;
   final String subtipo;
+  final String banco;
   final double valor;
   final String comprovante;
   final String tipoOrigemNome;
   final String idReferencia;
+  final String depositoStatus;
+  final DateTime? depositoLancadoEm;
+
+  bool get depositoLancado => depositoStatus == 'Lançado';
+  bool get ehOnline => origem == 'Online';
+  bool get ehOnlineIdentificado => ehOnline && subtipo == kSubtipoOnlineIdentificado;
+  bool get ehOnlineOficial => ehOnline && !ehOnlineIdentificado;
+
+  Donativo copyWith({String? banco, String? depositoStatus, DateTime? depositoLancadoEm, bool limparDepositoLancadoEm = false}) {
+    return Donativo(
+      id: id,
+      data: data,
+      nome: nome,
+      jc: jc,
+      tipoPessoa: tipoPessoa,
+      tipoDonativo: tipoDonativo,
+      tipoDonativoManual: tipoDonativoManual,
+      origem: origem,
+      subtipo: subtipo,
+      banco: banco ?? this.banco,
+      valor: valor,
+      comprovante: comprovante,
+      tipoOrigemNome: tipoOrigemNome,
+      idReferencia: idReferencia,
+      depositoStatus: depositoStatus ?? this.depositoStatus,
+      depositoLancadoEm: limparDepositoLancadoEm ? null : (depositoLancadoEm ?? this.depositoLancadoEm),
+    );
+  }
 
   String get tipoDonativoExibicao => tipoDonativo == 'Outro' && tipoDonativoManual.trim().isNotEmpty ? tipoDonativoManual.trim() : tipoDonativo;
   String get tipoOrigemNomeExibicao => tipoOrigemNome == 'Referencia' ? 'Referência' : 'Pessoa';
@@ -2272,10 +3570,13 @@ class Donativo {
         'tipoDonativoManual': tipoDonativoManual,
         'origem': origem,
         'subtipo': subtipo,
+        'banco': banco,
         'valor': valor,
         'comprovante': comprovante,
         'tipoOrigemNome': tipoOrigemNome,
         'idReferencia': idReferencia,
+        'depositoStatus': depositoStatus,
+        'depositoLancadoEm': depositoLancadoEm?.toIso8601String(),
       };
 
   factory Donativo.fromJson(Map<String, dynamic> json) => Donativo(
@@ -2288,10 +3589,13 @@ class Donativo {
         tipoDonativoManual: json['tipoDonativoManual'] ?? '',
         origem: json['origem'] ?? '',
         subtipo: json['subtipo'] ?? '',
+        banco: json['banco'] ?? '',
         valor: json['valor'] is num ? (json['valor'] as num).toDouble() : parseValor((json['valor'] ?? 0).toString()),
         comprovante: json['comprovante'] ?? '',
         tipoOrigemNome: json['tipoOrigemNome'] ?? '',
         idReferencia: json['idReferencia'] ?? '',
+        depositoStatus: json['depositoStatus'] ?? 'Pendente',
+        depositoLancadoEm: parseNullableDate(json['depositoLancadoEm']),
       );
 
   Map<String, dynamic> toSupabase() {
@@ -2306,12 +3610,15 @@ class Donativo {
       'tipo_donativo_manual': tipoDonativoManual,
       'origem': origem,
       'subtipo': subtipo,
+      'banco': banco,
       'valor': valor,
       'comprovante_path': arquivo?.path ?? '',
       'comprovante_nome': arquivo?.nome ?? '',
       'comprovante_tipo': arquivo?.extensao ?? '',
       'tipo_origem_nome': tipoOrigemNome,
       'id_referencia': idReferencia,
+      'deposito_status': depositoStatus,
+      'deposito_lancado_em': depositoLancadoEm?.toIso8601String(),
     };
   }
 
@@ -2340,10 +3647,13 @@ class Donativo {
       tipoDonativoManual: (json['tipo_donativo_manual'] ?? '').toString(),
       origem: (json['origem'] ?? '').toString(),
       subtipo: (json['subtipo'] ?? '').toString(),
+      banco: (json['banco'] ?? '').toString(),
       valor: json['valor'] is num ? (json['valor'] as num).toDouble() : parseValor((json['valor'] ?? 0).toString()),
       comprovante: comprovanteJson,
       tipoOrigemNome: (json['tipo_origem_nome'] ?? '').toString(),
       idReferencia: (json['id_referencia'] ?? '').toString(),
+      depositoStatus: (json['deposito_status'] ?? 'Pendente').toString(),
+      depositoLancadoEm: parseNullableDate(json['deposito_lancado_em']),
     );
   }
 }
@@ -2594,6 +3904,14 @@ DateTime parseDate(dynamic value) {
   return DateTime.tryParse(raw) ?? tryParseBrDate(raw) ?? DateTime.now();
 }
 
+DateTime? parseNullableDate(dynamic value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  final raw = value.toString().trim();
+  if (raw.isEmpty) return null;
+  return DateTime.tryParse(raw) ?? tryParseBrDate(raw);
+}
+
 DateTime? tryParseBrDate(String raw) {
   final valor = raw.trim();
   if (valor.isEmpty) return null;
@@ -2604,7 +3922,7 @@ DateTime? tryParseBrDate(String raw) {
   }
 }
 
-String sqlDate(DateTime value) => DateFormat("yyyy-MM-dd").format(value);
+String sqlDate(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
 
 DateTime dateOnly(DateTime value) => DateTime(value.year, value.month, value.day);
 
@@ -2678,7 +3996,7 @@ List<String> subtiposPorOrigem(String origem) {
     case 'Transferência':
       return const ['PIX', 'TED', 'Depósito', 'Boleto'];
     case 'Online':
-      return const ['Aplicativo', 'Site', 'PIX Online'];
+      return const [kSubtipoOnlineOficial, kSubtipoOnlineIdentificado];
     case 'Urna':
     default:
       return const ['Presencial'];
@@ -2799,12 +4117,23 @@ class SearchBox extends StatelessWidget {
 
 
 class ComprovantePickerCard extends StatelessWidget {
-  const ComprovantePickerCard({super.key, required this.comprovante, required this.onTakePhoto, required this.onPickImage, required this.onPickFile, required this.onRemove});
+  const ComprovantePickerCard({
+    super.key,
+    required this.comprovante,
+    required this.onTakePhoto,
+    required this.onPickImage,
+    required this.onPickFile,
+    required this.onRemove,
+    this.titulo = 'Comprovante da transferência',
+    this.descricao = 'Anexe imagem, PDF ou tire foto do comprovante. No iPhone, você também pode salvar o comprovante do WhatsApp em Fotos/Arquivos e selecionar por aqui.',
+  });
   final ComprovanteArquivo? comprovante;
   final VoidCallback onTakePhoto;
   final VoidCallback onPickImage;
   final VoidCallback onPickFile;
   final VoidCallback? onRemove;
+  final String titulo;
+  final String descricao;
 
   @override
   Widget build(BuildContext context) {
@@ -2819,11 +4148,11 @@ class ComprovantePickerCard extends StatelessWidget {
               children: [
                 const Icon(Icons.attach_file, color: kAccent),
                 const SizedBox(width: 8),
-                Expanded(child: Text('Comprovante da transferência', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900))),
+                Expanded(child: Text(titulo, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900))),
               ],
             ),
             const SizedBox(height: 8),
-            const Text('Anexe imagem, PDF ou tire foto do comprovante. No iPhone, você também pode salvar o comprovante do WhatsApp em Fotos/Arquivos e selecionar por aqui.'),
+            Text(descricao),
             const SizedBox(height: 12),
             if (comprovante == null)
               const Text('Nenhum comprovante anexado.', style: TextStyle(color: Colors.black54))

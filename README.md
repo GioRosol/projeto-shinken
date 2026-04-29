@@ -26,3 +26,14 @@ git add .
 git commit -m "Integra Supabase"
 git push
 ```
+
+
+## v09 - Ajuste final de lançamento
+
+- Login usando a logo centralizada da Igreja Messiânica.
+- Frequência contínua agora abre em modal/sheet, no mesmo padrão visual do donativo.
+- No lançamento de donativo, o primeiro campo agora é a origem do donativo: Urna, Transferência ou Online.
+- Ao selecionar Online, o formulário muda os campos:
+  - Online oficial acumulado: não pede pessoa.
+  - Online identificado: pede pessoa e permite comprovante.
+- Transferência mantém banco em lista suspensa: Itaú, Banco do Brasil e Bradesco.
