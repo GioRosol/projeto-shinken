@@ -3,13 +3,21 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 const kJcPadrao = 'Johrei Center Betim';
 const kAccent = Color(0xFF1B5E20);
 const kSoftGreen = Color(0xFFE8F5E9);
 const kTextDark = Color(0xFF1F1F1F);
+
+// Supabase - Projeto Shinken
+const kSupabaseUrl = 'https://efjepzydpzmsgokpzhxm.supabase.co';
+const kSupabasePublishableKey = 'sb_publishable_nwJNB7j7JB3Qwka7PpiHzA_a0XHrJbT';
+const kComprovantesBucket = 'comprovantes';
 
 final brDate = DateFormat('dd/MM/yyyy');
 final brMoney = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -24,8 +32,12 @@ const kOrigensDonativo = ['Urna', 'Transferência', 'Online'];
 const kTiposOrigemNomeDonativo = ['Pessoa', 'Referencia'];
 const kTiposEventoPadrao = ['Dia a dia', 'Culto Mensal', 'Oração pela Construção do Paraíso no Lar'];
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: kSupabaseUrl,
+    anonKey: kSupabasePublishableKey,
+  );
   runApp(const ProjetoShinkenApp());
 }
 
@@ -83,12 +95,119 @@ class _ProjetoShinkenAppState extends State<ProjetoShinkenApp> {
           ),
           home: store.isLoading
               ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-              : MainShell(store: store),
+              : store.isAuthenticated
+                  ? MainShell(store: store)
+                  : LoginPage(store: store),
         );
       },
     );
   }
 }
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final emailController = TextEditingController();
+  final senhaController = TextEditingController();
+  bool carregando = false;
+  String? erro;
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    senhaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> entrar() async {
+    setState(() {
+      carregando = true;
+      erro = null;
+    });
+
+    try {
+      await widget.store.login(
+        email: emailController.text.trim(),
+        senha: senhaController.text,
+      );
+    } catch (e) {
+      setState(() => erro = limparMensagemErro(e));
+    } finally {
+      if (mounted) setState(() => carregando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 430),
+          child: Card(
+            margin: const EdgeInsets.all(20),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const CircleAvatar(
+                    radius: 28,
+                    backgroundColor: kSoftGreen,
+                    child: Icon(Icons.lock_outline, color: kAccent, size: 30),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Projeto Shinken', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  const Text('Entre para acessar os dados no Supabase.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(labelText: 'E-mail'),
+                    onSubmitted: (_) => entrar(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: senhaController,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.password],
+                    decoration: const InputDecoration(labelText: 'Senha'),
+                    onSubmitted: (_) => entrar(),
+                  ),
+                  if (erro != null) ...[
+                    const SizedBox(height: 12),
+                    Text(erro!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+                  ],
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: carregando ? null : entrar,
+                    icon: carregando ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
+                    label: const Text('Entrar'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Use o usuário criado em Authentication > Users no Supabase.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.black45),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.store});
@@ -390,7 +509,16 @@ class _DonativosPageState extends State<DonativosPage> {
               onTap: () => abrirEdicao(item),
               leading: const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.volunteer_activism, color: kAccent)),
               title: Text(item.nome.isEmpty ? 'Sem nome' : item.nome, style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text('${brDate.format(item.data)} • ${item.tipoDonativoExibicao} • ${item.origem} • ${item.subtipo}'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${brDate.format(item.data)} • ${item.tipoDonativoExibicao} • ${item.origem} • ${item.subtipo}'),
+                  if (item.temComprovante) ...[
+                    const SizedBox(height: 4),
+                    Text('📎 ${item.nomeComprovante}', style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600)),
+                  ],
+                ],
+              ),
               trailing: SizedBox(
                 width: 138,
                 child: Row(
@@ -422,8 +550,9 @@ class _DonativosPageState extends State<DonativosPage> {
       ],
     );
   }
-}
 
+
+}
 
 class FrequenciaPage extends StatefulWidget {
   const FrequenciaPage({super.key, required this.store});
@@ -888,6 +1017,69 @@ class ConfigPage extends StatelessWidget {
               isThreeLine: true,
             ),
           ),
+          Card(
+            child: ListTile(
+              leading: Icon(store.isAuthenticated ? Icons.cloud_done_outlined : Icons.cloud_off_outlined),
+              title: const Text('Supabase'),
+              subtitle: Text(store.statusSupabase),
+              isThreeLine: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: store.isSyncing
+                ? null
+                : () async {
+                    try {
+                      await store.enviarDadosLocaisParaSupabase();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Dados enviados para o Supabase.')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(limparMensagemErro(e))),
+                        );
+                      }
+                    }
+                  },
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: const Text('Enviar dados locais para Supabase'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: store.isSyncing
+                ? null
+                : () async {
+                    try {
+                      await store.carregarDadosDoSupabase();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Dados recarregados do Supabase.')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(limparMensagemErro(e))),
+                        );
+                      }
+                    }
+                  },
+            icon: const Icon(Icons.cloud_sync_outlined),
+            label: const Text('Recarregar do Supabase'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await store.logout();
+              if (context.mounted) Navigator.pop(context);
+            },
+            icon: const Icon(Icons.logout),
+            label: const Text('Sair da conta'),
+          ),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: () async {
@@ -976,6 +1168,7 @@ class _DonativoFormState extends State<DonativoForm> {
   String origem = 'Urna';
   String subtipo = 'Presencial';
   String tipoOrigemNome = 'Pessoa';
+  ComprovanteArquivo? comprovanteAtual;
 
   List<String> get subtiposDisponiveis => subtiposPorOrigem(origem);
   List<String> get nomesBase => tipoOrigemNome == 'Pessoa' ? widget.store.nomesPessoas() : widget.store.nomesReferencias();
@@ -994,6 +1187,7 @@ class _DonativoFormState extends State<DonativoForm> {
     origem = valorSeguro(item?.origem, kOrigensDonativo, fallback: 'Urna');
     tipoOrigemNome = valorSeguro(item?.tipoOrigemNome, kTiposOrigemNomeDonativo, fallback: 'Pessoa');
     subtipo = valorSeguro(item?.subtipo, subtiposDisponiveis, fallback: subtiposDisponiveis.first);
+    comprovanteAtual = ComprovanteArquivo.fromStorageString(item?.comprovante ?? '');
     if (tipoOrigemNome == 'Referencia') tipoPessoa = 'Outro';
   }
 
@@ -1040,6 +1234,102 @@ class _DonativoFormState extends State<DonativoForm> {
     if (pessoa != null) tipoPessoa = valorSeguro(pessoa.tipoPessoaAtual, kTiposPessoaDonativo, fallback: 'Membro');
   }
 
+  Future<void> selecionarComprovante({required bool imagem}) async {
+    final resultado = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+      type: imagem ? FileType.image : FileType.custom,
+      allowedExtensions: imagem ? null : const ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'webp'],
+    );
+
+    if (resultado == null || resultado.files.isEmpty) return;
+
+    final arquivo = resultado.files.single;
+    final bytes = arquivo.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível ler o arquivo selecionado.')),
+      );
+      return;
+    }
+
+    const limiteBytes = 3 * 1024 * 1024;
+    if (bytes.length > limiteBytes) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Arquivo muito grande. Use comprovante até 3 MB.')),
+      );
+      return;
+    }
+
+    setState(() {
+      comprovanteAtual = ComprovanteArquivo(
+        nome: arquivo.name,
+        extensao: arquivo.extension ?? '',
+        tamanhoBytes: arquivo.size,
+        base64: base64Encode(bytes),
+        dataAnexo: DateTime.now(),
+        path: '',
+      );
+    });
+  }
+
+  Future<void> tirarFotoComprovante() async {
+    try {
+      final picker = ImagePicker();
+      final foto = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+        maxWidth: 1600,
+      );
+
+      if (foto == null) return;
+
+      final bytes = await foto.readAsBytes();
+      if (bytes.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível ler a foto tirada.')),
+        );
+        return;
+      }
+
+      const limiteBytes = 3 * 1024 * 1024;
+      if (bytes.length > limiteBytes) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto muito grande. Tire novamente ou use arquivo até 3 MB.')),
+        );
+        return;
+      }
+
+      final nomeArquivo = foto.name.trim().isEmpty
+          ? 'comprovante_${DateTime.now().millisecondsSinceEpoch}.jpg'
+          : foto.name;
+
+      setState(() {
+        comprovanteAtual = ComprovanteArquivo(
+          nome: nomeArquivo,
+          extensao: extensaoArquivo(nomeArquivo, fallback: 'jpg'),
+          tamanhoBytes: bytes.length,
+          base64: base64Encode(bytes),
+          dataAnexo: DateTime.now(),
+          path: '',
+        );
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível abrir a câmera: ${limparMensagemErro(error)}')),
+      );
+    }
+  }
+
+  void removerComprovante() {
+    setState(() => comprovanteAtual = null);
+  }
+
   Future<void> salvar() async {
     final form = formKey.currentState;
     if (form == null || !form.validate()) return;
@@ -1048,8 +1338,17 @@ class _DonativoFormState extends State<DonativoForm> {
     final referencia = tipoOrigemNome == 'Referencia' ? widget.store.findReferenciaByName(nome.text) : null;
     final pessoa = tipoOrigemNome == 'Pessoa' ? widget.store.findPessoaByName(nome.text) : null;
 
+    final novoId = widget.initialValue?.id ?? widget.store.nextDonativoId();
+    var comprovanteFinal = '';
+    if (origem == 'Transferência' && comprovanteAtual != null) {
+      comprovanteFinal = await widget.store.salvarComprovanteNoSupabase(
+        donativoId: novoId,
+        comprovante: comprovanteAtual!,
+      );
+    }
+
     final novo = Donativo(
-      id: widget.initialValue?.id ?? widget.store.nextDonativoId(),
+      id: novoId,
       data: dataLancamento,
       nome: nome.text.trim(),
       jc: widget.initialValue?.jc ?? kJcPadrao,
@@ -1059,7 +1358,7 @@ class _DonativoFormState extends State<DonativoForm> {
       origem: origem,
       subtipo: subtipo,
       valor: parseValor(valor.text),
-      comprovante: widget.initialValue?.comprovante ?? '',
+      comprovante: comprovanteFinal,
       tipoOrigemNome: tipoOrigemNome,
       idReferencia: referencia?.idReferencia ?? widget.initialValue?.idReferencia ?? '',
     );
@@ -1172,6 +1471,16 @@ class _DonativoFormState extends State<DonativoForm> {
         ),
         const SizedBox(height: 12),
         AppDropdown(value: subtipo, labelText: 'Subtipo', items: subtiposDisponiveis, onChanged: (v) => setState(() => subtipo = v)),
+        if (origem == 'Transferência') ...[
+          const SizedBox(height: 20),
+          ComprovantePickerCard(
+            comprovante: comprovanteAtual,
+            onTakePhoto: tirarFotoComprovante,
+            onPickImage: () => selecionarComprovante(imagem: true),
+            onPickFile: () => selecionarComprovante(imagem: false),
+            onRemove: comprovanteAtual == null ? null : removerComprovante,
+          ),
+        ],
       ],
     );
   }
@@ -1475,7 +1784,12 @@ class _OnlineFormState extends State<OnlineForm> {
 
 class AppStore extends ChangeNotifier {
   bool isLoading = true;
+  bool isAuthenticated = false;
+  bool isSyncing = false;
+  String statusSupabase = 'Não conectado';
   late SharedPreferences prefs;
+
+  SupabaseClient get supabase => Supabase.instance.client;
 
   List<Pessoa> pessoas = [];
   List<Donativo> donativos = [];
@@ -1500,6 +1814,11 @@ class AppStore extends ChangeNotifier {
 
     if (!jaImportouSeed && bancoLocalVazio) {
       await importarDadosDoExcel(notificar: false);
+    }
+
+    isAuthenticated = supabase.auth.currentSession != null;
+    if (isAuthenticated) {
+      await carregarDadosDoSupabase(substituirSomenteSeHouverDados: true);
     }
 
     isLoading = false;
@@ -1528,6 +1847,108 @@ class AppStore extends ChangeNotifier {
     if (notificar) notifyListeners();
   }
 
+
+  Future<void> login({required String email, required String senha}) async {
+    final response = await supabase.auth.signInWithPassword(email: email, password: senha);
+    if (response.session == null) {
+      throw Exception('Não foi possível entrar. Confira e-mail e senha.');
+    }
+    isAuthenticated = true;
+    statusSupabase = 'Conectado';
+    await carregarDadosDoSupabase(substituirSomenteSeHouverDados: true);
+    notifyListeners();
+  }
+
+  Future<void> logout() async {
+    await supabase.auth.signOut();
+    isAuthenticated = false;
+    statusSupabase = 'Desconectado';
+    notifyListeners();
+  }
+
+  Future<void> carregarDadosDoSupabase({bool substituirSomenteSeHouverDados = false}) async {
+    if (!isAuthenticated) return;
+    isSyncing = true;
+    statusSupabase = 'Sincronizando...';
+    notifyListeners();
+
+    try {
+      final rawPessoas = await supabase.from('pessoas').select().order('nome');
+      final rawReferencias = await supabase.from('referencias').select().order('nome_referencia');
+      final rawDonativos = await supabase.from('donativos').select().order('data', ascending: false);
+      final rawFrequencias = await supabase.from('frequencias').select().order('data', ascending: false);
+
+      final pessoasRemote = rows(rawPessoas).map(Pessoa.fromSupabase).toList();
+      final referenciasRemote = rows(rawReferencias).map(ReferenciaNome.fromSupabase).toList();
+      final donativosRemote = rows(rawDonativos).map(Donativo.fromSupabase).toList();
+      final frequenciasRemote = rows(rawFrequencias).map(Frequencia.fromSupabase).toList();
+
+      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty;
+      if (!substituirSomenteSeHouverDados || remotoTemDados) {
+        pessoas = pessoasRemote;
+        referencias = referenciasRemote;
+        donativos = donativosRemote;
+        frequencias = frequenciasRemote;
+        await _saveRawList('pessoas', pessoas, (e) => e.toJson());
+        await _saveRawList('referencias', referencias, (e) => e.toJson());
+        await _saveRawList('donativos', donativos, (e) => e.toJson());
+        await _saveRawList('frequencias', frequencias, (e) => e.toJson());
+      }
+      statusSupabase = remotoTemDados ? 'Dados carregados do Supabase' : 'Supabase conectado, mas ainda vazio';
+    } catch (e) {
+      statusSupabase = 'Erro no Supabase: ${limparMensagemErro(e)}';
+      rethrow;
+    } finally {
+      isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> enviarDadosLocaisParaSupabase() async {
+    if (!isAuthenticated) throw Exception('Entre no app antes de enviar dados.');
+    isSyncing = true;
+    statusSupabase = 'Enviando dados locais...';
+    notifyListeners();
+
+    try {
+      if (pessoas.isNotEmpty) await supabase.from('pessoas').upsert(pessoas.map((e) => e.toSupabase()).toList());
+      if (referencias.isNotEmpty) await supabase.from('referencias').upsert(referencias.map((e) => e.toSupabase()).toList());
+      if (donativos.isNotEmpty) await supabase.from('donativos').upsert(donativos.map((e) => e.toSupabase()).toList());
+      if (frequencias.isNotEmpty) await supabase.from('frequencias').upsert(frequencias.map((e) => e.toSupabase()).toList());
+      statusSupabase = 'Dados locais enviados para o Supabase';
+    } catch (e) {
+      statusSupabase = 'Erro ao enviar: ${limparMensagemErro(e)}';
+      rethrow;
+    } finally {
+      isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String> salvarComprovanteNoSupabase({required int donativoId, required ComprovanteArquivo comprovante}) async {
+    if (!isAuthenticated || comprovante.base64.isEmpty) return comprovante.toStorageString();
+
+    final bytes = base64Decode(comprovante.base64);
+    final nomeSeguro = sanitizeFileName(comprovante.nome);
+    final path = 'donativos/$donativoId/${DateTime.now().millisecondsSinceEpoch}_$nomeSeguro';
+    await supabase.storage.from(kComprovantesBucket).uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentTypeForFile(comprovante.nome),
+          ),
+        );
+    return comprovante.copyWith(base64: '', path: path).toStorageString();
+  }
+
+  List<Map<String, dynamic>> rows(dynamic value) {
+    if (value is List) {
+      return value.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
   List<T> _seedList<T>(Map<String, dynamic> data, String key, T Function(Map<String, dynamic>) fromJson) {
     final raw = data[key];
     if (raw is! List) return [];
@@ -1552,6 +1973,7 @@ class AppStore extends ChangeNotifier {
 
   Future<void> addPessoa(Pessoa value) async {
     pessoas.add(value);
+    if (isAuthenticated) await supabase.from('pessoas').upsert(value.toSupabase());
     await _saveList('pessoas', pessoas, (e) => e.toJson());
   }
 
@@ -1564,11 +1986,13 @@ class AppStore extends ChangeNotifier {
     } else {
       donativos.add(value);
     }
+    if (isAuthenticated) await supabase.from('donativos').upsert(value.toSupabase());
     await _saveList('donativos', donativos, (e) => e.toJson());
   }
 
   Future<void> deleteDonativo(int id) async {
     donativos.removeWhere((item) => item.id == id);
+    if (isAuthenticated) await supabase.from('donativos').delete().eq('id', id);
     await _saveList('donativos', donativos, (e) => e.toJson());
   }
 
@@ -1581,11 +2005,13 @@ class AppStore extends ChangeNotifier {
     } else {
       frequencias.add(value);
     }
+    if (isAuthenticated) await supabase.from('frequencias').upsert(value.toSupabase());
     await _saveList('frequencias', frequencias, (e) => e.toJson());
   }
 
   Future<void> deleteFrequencia(int id) async {
     frequencias.removeWhere((item) => item.id == id);
+    if (isAuthenticated) await supabase.from('frequencias').delete().eq('id', id);
     await _saveList('frequencias', frequencias, (e) => e.toJson());
   }
 
@@ -1606,6 +2032,7 @@ class AppStore extends ChangeNotifier {
 
   Future<void> addReferencia(ReferenciaNome value) async {
     referencias.add(value);
+    if (isAuthenticated) await supabase.from('referencias').upsert(value.toSupabase());
     await _saveList('referencias', referencias, (e) => e.toJson());
   }
 
@@ -1722,6 +2149,95 @@ class Pessoa {
         qtdPresencas: json['qtdPresencas'] ?? 0,
         jc: json['jc'] ?? kJcPadrao,
       );
+
+  Map<String, dynamic> toSupabase() => {
+        'id_pessoa': idPessoa,
+        'nome': nome,
+        'tipo_pessoa_atual': tipoPessoaAtual,
+        'primeira_presenca': sqlDate(primeiraPresenca),
+        'ultima_presenca': sqlDate(ultimaPresenca),
+        'qtd_presencas': qtdPresencas,
+        'jc': jc,
+      };
+
+  factory Pessoa.fromSupabase(Map<String, dynamic> json) => Pessoa(
+        idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+        nome: (json['nome'] ?? '').toString(),
+        tipoPessoaAtual: (json['tipo_pessoa_atual'] ?? '').toString(),
+        primeiraPresenca: parseDate(json['primeira_presenca']),
+        ultimaPresenca: parseDate(json['ultima_presenca']),
+        qtdPresencas: json['qtd_presencas'] is num ? (json['qtd_presencas'] as num).toInt() : 0,
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+}
+
+
+class ComprovanteArquivo {
+  ComprovanteArquivo({required this.nome, required this.extensao, required this.tamanhoBytes, required this.base64, required this.dataAnexo, this.path = ''});
+  final String nome;
+  final String extensao;
+  final int tamanhoBytes;
+  final String base64;
+  final DateTime dataAnexo;
+  final String path;
+
+  String get tamanhoFormatado {
+    if (tamanhoBytes <= 0) return 'tamanho não informado';
+    if (tamanhoBytes < 1024) return '$tamanhoBytes B';
+    if (tamanhoBytes < 1024 * 1024) return '${(tamanhoBytes / 1024).toStringAsFixed(1)} KB';
+    return '${(tamanhoBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  ComprovanteArquivo copyWith({String? nome, String? extensao, int? tamanhoBytes, String? base64, DateTime? dataAnexo, String? path}) {
+    return ComprovanteArquivo(
+      nome: nome ?? this.nome,
+      extensao: extensao ?? this.extensao,
+      tamanhoBytes: tamanhoBytes ?? this.tamanhoBytes,
+      base64: base64 ?? this.base64,
+      dataAnexo: dataAnexo ?? this.dataAnexo,
+      path: path ?? this.path,
+    );
+  }
+
+  String toStorageString() => jsonEncode({
+        'versao': 1,
+        'nome': nome,
+        'extensao': extensao,
+        'tamanhoBytes': tamanhoBytes,
+        'base64': base64,
+        'path': path,
+        'dataAnexo': dataAnexo.toIso8601String(),
+      });
+
+  static ComprovanteArquivo? fromStorageString(String raw) {
+    final texto = raw.trim();
+    if (texto.isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(texto);
+      if (decoded is Map<String, dynamic>) {
+        return ComprovanteArquivo(
+          nome: (decoded['nome'] ?? 'Comprovante').toString(),
+          extensao: (decoded['extensao'] ?? '').toString(),
+          tamanhoBytes: decoded['tamanhoBytes'] is num ? (decoded['tamanhoBytes'] as num).toInt() : 0,
+          base64: (decoded['base64'] ?? '').toString(),
+          dataAnexo: parseDate(decoded['dataAnexo']),
+          path: (decoded['path'] ?? decoded['comprovante_path'] ?? '').toString(),
+        );
+      }
+    } catch (_) {
+      return ComprovanteArquivo(
+        nome: texto,
+        extensao: '',
+        tamanhoBytes: 0,
+        base64: '',
+        dataAnexo: DateTime.now(),
+        path: '',
+      );
+    }
+
+    return null;
+  }
 }
 
 class Donativo {
@@ -1742,6 +2258,9 @@ class Donativo {
 
   String get tipoDonativoExibicao => tipoDonativo == 'Outro' && tipoDonativoManual.trim().isNotEmpty ? tipoDonativoManual.trim() : tipoDonativo;
   String get tipoOrigemNomeExibicao => tipoOrigemNome == 'Referencia' ? 'Referência' : 'Pessoa';
+  ComprovanteArquivo? get comprovanteArquivo => ComprovanteArquivo.fromStorageString(comprovante);
+  bool get temComprovante => comprovanteArquivo != null;
+  String get nomeComprovante => comprovanteArquivo?.nome ?? 'Comprovante anexado';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -1774,6 +2293,59 @@ class Donativo {
         tipoOrigemNome: json['tipoOrigemNome'] ?? '',
         idReferencia: json['idReferencia'] ?? '',
       );
+
+  Map<String, dynamic> toSupabase() {
+    final arquivo = comprovanteArquivo;
+    return {
+      'id': id,
+      'data': sqlDate(data),
+      'nome': nome,
+      'jc': jc,
+      'tipo_pessoa': tipoPessoa,
+      'tipo_donativo': tipoDonativo,
+      'tipo_donativo_manual': tipoDonativoManual,
+      'origem': origem,
+      'subtipo': subtipo,
+      'valor': valor,
+      'comprovante_path': arquivo?.path ?? '',
+      'comprovante_nome': arquivo?.nome ?? '',
+      'comprovante_tipo': arquivo?.extensao ?? '',
+      'tipo_origem_nome': tipoOrigemNome,
+      'id_referencia': idReferencia,
+    };
+  }
+
+  factory Donativo.fromSupabase(Map<String, dynamic> json) {
+    final path = (json['comprovante_path'] ?? '').toString();
+    final nomeComprovante = (json['comprovante_nome'] ?? '').toString();
+    final tipoComprovante = (json['comprovante_tipo'] ?? '').toString();
+    final comprovanteJson = path.isEmpty
+        ? ''
+        : ComprovanteArquivo(
+            nome: nomeComprovante.isEmpty ? 'Comprovante' : nomeComprovante,
+            extensao: tipoComprovante,
+            tamanhoBytes: 0,
+            base64: '',
+            dataAnexo: DateTime.now(),
+            path: path,
+          ).toStorageString();
+
+    return Donativo(
+      id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+      data: parseDate(json['data']),
+      nome: (json['nome'] ?? '').toString(),
+      jc: (json['jc'] ?? kJcPadrao).toString(),
+      tipoPessoa: (json['tipo_pessoa'] ?? '').toString(),
+      tipoDonativo: (json['tipo_donativo'] ?? '').toString(),
+      tipoDonativoManual: (json['tipo_donativo_manual'] ?? '').toString(),
+      origem: (json['origem'] ?? '').toString(),
+      subtipo: (json['subtipo'] ?? '').toString(),
+      valor: json['valor'] is num ? (json['valor'] as num).toDouble() : parseValor((json['valor'] ?? 0).toString()),
+      comprovante: comprovanteJson,
+      tipoOrigemNome: (json['tipo_origem_nome'] ?? '').toString(),
+      idReferencia: (json['id_referencia'] ?? '').toString(),
+    );
+  }
 }
 
 
@@ -1815,6 +2387,32 @@ class Frequencia {
         dataLancamento: parseDate(json['dataLancamento']),
         horaLancamento: json['horaLancamento'] ?? '',
       );
+
+  Map<String, dynamic> toSupabase() => {
+        'id': id,
+        'data': sqlDate(data),
+        'nome': nome,
+        'tipo_pessoa': tipoPessoaAtual.isNotEmpty ? tipoPessoaAtual : tipoPessoaInformado,
+        'tipo_evento': tipoEvento,
+        'observacao': observacao,
+        'jc': jc,
+      };
+
+  factory Frequencia.fromSupabase(Map<String, dynamic> json) {
+    final tipoPessoa = (json['tipo_pessoa'] ?? '').toString();
+    return Frequencia(
+      id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+      data: parseDate(json['data']),
+      tipoEvento: (json['tipo_evento'] ?? '').toString(),
+      nome: (json['nome'] ?? '').toString(),
+      tipoPessoaInformado: tipoPessoa,
+      tipoPessoaAtual: tipoPessoa,
+      jc: (json['jc'] ?? kJcPadrao).toString(),
+      observacao: (json['observacao'] ?? '').toString(),
+      dataLancamento: DateTime.now(),
+      horaLancamento: '',
+    );
+  }
 }
 
 class ExperienciaFe {
@@ -1919,6 +2517,26 @@ class ReferenciaNome {
         dataCadastro: parseDate(json['dataCadastro']),
         horaCadastro: json['horaCadastro'] ?? '',
       );
+
+  Map<String, dynamic> toSupabase() => {
+        'id_referencia': idReferencia,
+        'nome_referencia': nomeReferencia,
+        'tipo_referencia': tipoReferencia,
+        'ativo': ativo,
+      };
+
+  factory ReferenciaNome.fromSupabase(Map<String, dynamic> json) => ReferenciaNome(
+        idReferencia: (json['id_referencia'] ?? '').toString(),
+        nomeReferencia: (json['nome_referencia'] ?? '').toString(),
+        tipoReferencia: (json['tipo_referencia'] ?? '').toString(),
+        idPessoaVinculada: 0,
+        nomePessoaVinculada: '',
+        jc: kJcPadrao,
+        observacao: '',
+        ativo: json['ativo'] is bool ? json['ativo'] as bool : true,
+        dataCadastro: DateTime.now(),
+        horaCadastro: '',
+      );
 }
 
 class OnlineIdentificacao {
@@ -1986,6 +2604,8 @@ DateTime? tryParseBrDate(String raw) {
   }
 }
 
+String sqlDate(DateTime value) => DateFormat("yyyy-MM-dd").format(value);
+
 DateTime dateOnly(DateTime value) => DateTime(value.year, value.month, value.day);
 
 double parseValor(String raw) {
@@ -1994,6 +2614,13 @@ double parseValor(String raw) {
 }
 
 String formatValorInput(double value) => brMoneyInput.format(value).trim();
+
+String extensaoArquivo(String nomeArquivo, {String fallback = ''}) {
+  final partes = nomeArquivo.split('.');
+  if (partes.length < 2) return fallback;
+  final ext = partes.last.trim().toLowerCase();
+  return ext.isEmpty ? fallback : ext;
+}
 
 String valorSeguro(String? value, List<String> options, {required String fallback}) {
   if (value != null && options.contains(value)) return value;
@@ -2026,6 +2653,25 @@ String formatPeriodo(DateTime? inicio, DateTime? fim) {
   if (inicio != null) return 'Desde ${brDate.format(inicio)}';
   return 'Até ${brDate.format(fim!)}';
 }
+String sanitizeFileName(String raw) {
+  final safe = raw.trim().replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+  return safe.isEmpty ? 'comprovante' : safe;
+}
+
+String contentTypeForFile(String name) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.heic')) return 'image/heic';
+  return 'image/jpeg';
+}
+
+String limparMensagemErro(Object error) {
+  final texto = error.toString();
+  return texto.replaceFirst('Exception: ', '').replaceFirst('AuthException(message: ', '').replaceAll(')', '').trim();
+}
+
 
 List<String> subtiposPorOrigem(String origem) {
   switch (origem) {
@@ -2147,6 +2793,78 @@ class SearchBox extends StatelessWidget {
       controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: hintText),
+    );
+  }
+}
+
+
+class ComprovantePickerCard extends StatelessWidget {
+  const ComprovantePickerCard({super.key, required this.comprovante, required this.onTakePhoto, required this.onPickImage, required this.onPickFile, required this.onRemove});
+  final ComprovanteArquivo? comprovante;
+  final VoidCallback onTakePhoto;
+  final VoidCallback onPickImage;
+  final VoidCallback onPickFile;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: kSoftGreen,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.attach_file, color: kAccent),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Comprovante da transferência', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900))),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text('Anexe imagem, PDF ou tire foto do comprovante. No iPhone, você também pode salvar o comprovante do WhatsApp em Fotos/Arquivos e selecionar por aqui.'),
+            const SizedBox(height: 12),
+            if (comprovante == null)
+              const Text('Nenhum comprovante anexado.', style: TextStyle(color: Colors.black54))
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFDADFD8)),
+                ),
+                child: Row(
+                  children: [
+                    const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.description_outlined, color: kAccent)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(comprovante!.nome, style: const TextStyle(fontWeight: FontWeight.w800)),
+                          Text(comprovante!.tamanhoFormatado, style: const TextStyle(color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                    IconButton(onPressed: onRemove, icon: const Icon(Icons.close), tooltip: 'Remover comprovante'),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(onPressed: onTakePhoto, icon: const Icon(Icons.photo_camera_outlined), label: const Text('Tirar foto')),
+                OutlinedButton.icon(onPressed: onPickImage, icon: const Icon(Icons.photo_library_outlined), label: const Text('Galeria')),
+                OutlinedButton.icon(onPressed: onPickFile, icon: const Icon(Icons.folder_open_outlined), label: const Text('Arquivos / PDF')),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

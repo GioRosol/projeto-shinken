@@ -1,22 +1,28 @@
-# Projeto Shinken Flutter — v03 Donativos e Frequência
+# Projeto Shinken v05 - Supabase
 
-Versão focada em deixar funcionando os módulos principais:
+Versão focada em Donativos e Frequência com integração Supabase.
 
-- Donativos: lista, filtros, total geral, decêndios, novo lançamento, edição e exclusão.
-- Frequência: lista, filtros, resumo por categoria/evento, novo lançamento, edição, exclusão e bloqueio de duplicidade por pessoa + data + evento.
-- Dados reais continuam vindo de `assets/seed_data.json`.
+## Inclui
+- Tela de login com Supabase Auth.
+- Donativos salvando no Supabase.
+- Frequência salvando no Supabase.
+- Upload de comprovantes de Transferência no bucket `comprovantes`.
+- Botões em Configurações para enviar dados locais e recarregar dados do Supabase.
 
-## Como usar
+## Primeiro uso
+1. Crie o usuário em Supabase > Authentication > Users.
+2. Entre no app com esse e-mail e senha.
+3. Vá em Mais > Configurações.
+4. Clique em `Enviar dados locais para Supabase` para mandar os dados importados do Excel.
+5. Depois teste novo donativo/frequência.
 
-Copie/substitua os arquivos deste pacote dentro da pasta do projeto Flutter que já está rodando.
-
-Depois rode:
-
-```bash
-flutter clean
-flutter pub get
-flutter analyze
-flutter run -d chrome
+## Publicação web
+```powershell
+flutter build web --base-href "/projeto-shinken/"
+Remove-Item -Recurse -Force docs -ErrorAction SilentlyContinue
+mkdir docs
+Copy-Item -Path build\web\* -Destination docs -Recurse -Force
+git add .
+git commit -m "Integra Supabase"
+git push
 ```
-
-Se o navegador abrir dados antigos em branco, use Ctrl+F5 no Chrome.
