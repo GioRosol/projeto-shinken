@@ -37,3 +37,6 @@ git push
   - Online oficial acumulado: não pede pessoa.
   - Online identificado: pede pessoa e permite comprovante.
 - Transferência mantém banco em lista suspensa: Itaú, Banco do Brasil e Bradesco.
+
+
+Versão v10: MaterialApp title ajustado para Johrei Center Betim; base v09 mantida.
