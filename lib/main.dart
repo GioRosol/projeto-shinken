@@ -23,6 +23,11 @@ const kExperienciasBucket = 'experiencias-fe';
 const kPessoasFotosBucket = 'pessoas-fotos';
 const kMaxArquivoExperienciaBytes = 5 * 1024 * 1024;
 const kMaxFotoPessoaBytes = 2 * 1024 * 1024;
+const kLoginDominioInterno = 'projetoshinken.local';
+const kTempoBloqueioPadrao = Duration(minutes: 15);
+
+final kNavigatorKey = GlobalKey<NavigatorState>();
+final kScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 final brDate = DateFormat('dd/MM/yyyy');
 final brMoney = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -41,6 +46,30 @@ const kTiposEventoPadrao = ['Dia a dia', 'Culto Mensal', 'Oração pela Constru�
 const kBancosTransferencia = ['Itaú', 'Banco do Brasil', 'Bradesco'];
 const kStatusExperiencia = ['Em produção', 'Revisar', 'Pronta', 'Apresentada', 'Arquivada'];
 const kTagsExperiencia = ['Johrei', 'Gratidão', 'Doença', 'Pobreza', 'Conflito', 'Família', 'Trabalho', 'Belo', 'Encaminhamento', 'Milagre', 'Mudança interior', 'Dedicação'];
+
+String usuarioParaEmailInterno(String usuario) {
+  final valor = usuario.trim();
+  if (valor.contains('@')) return valor.toLowerCase();
+
+  final normalizado = valor
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('à', 'a')
+      .replaceAll('ã', 'a')
+      .replaceAll('â', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('ê', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ô', 'o')
+      .replaceAll('õ', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ç', 'c')
+      .replaceAll(RegExp(r'[^a-z0-9._-]+'), '');
+
+  return '$normalizado@$kLoginDominioInterno';
+}
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -73,6 +102,8 @@ class _ProjetoShinkenAppState extends State<ProjetoShinkenApp> {
       animation: store,
       builder: (context, _) {
         return MaterialApp(
+          navigatorKey: kNavigatorKey,
+          scaffoldMessengerKey: kScaffoldMessengerKey,
           debugShowCheckedModeBanner: false,
           title: 'Johrei Center Betim',
           theme: ThemeData(
@@ -106,7 +137,7 @@ class _ProjetoShinkenAppState extends State<ProjetoShinkenApp> {
           home: store.isLoading
               ? const Scaffold(body: Center(child: CircularProgressIndicator()))
               : store.isAuthenticated
-                  ? MainShell(store: store)
+                  ? AutoLogoutShell(store: store, child: MainShell(store: store))
                   : LoginPage(store: store),
         );
       },
@@ -159,19 +190,25 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final emailController = TextEditingController();
+  final usuarioController = TextEditingController();
   final senhaController = TextEditingController();
   bool carregando = false;
   String? erro;
 
   @override
   void dispose() {
-    emailController.dispose();
+    usuarioController.dispose();
     senhaController.dispose();
     super.dispose();
   }
 
   Future<void> entrar() async {
+    final usuario = usuarioController.text.trim();
+    if (usuario.isEmpty || senhaController.text.isEmpty) {
+      setState(() => erro = 'Informe usuário e senha.');
+      return;
+    }
+
     setState(() {
       carregando = true;
       erro = null;
@@ -179,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       await widget.store.login(
-        email: emailController.text.trim(),
+        email: usuarioParaEmailInterno(usuarioController.text),
         senha: senhaController.text,
       );
     } catch (e) {
@@ -215,10 +252,10 @@ class _LoginPageState extends State<LoginPage> {
                   const Text('Entre para acessar os dados no Supabase.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
                   const SizedBox(height: 24),
                   TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(labelText: 'E-mail'),
+                    controller: usuarioController,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.username],
+                    decoration: const InputDecoration(labelText: 'Usuário'),
                     onSubmitted: (_) => entrar(),
                   ),
                   const SizedBox(height: 12),
@@ -239,18 +276,86 @@ class _LoginPageState extends State<LoginPage> {
                     icon: carregando ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
                     label: const Text('Entrar'),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Use o usuário criado em Authentication > Users no Supabase.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.black45),
-                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+
+class AutoLogoutShell extends StatefulWidget {
+  const AutoLogoutShell({super.key, required this.store, required this.child});
+
+  final AppStore store;
+  final Widget child;
+
+  @override
+  State<AutoLogoutShell> createState() => _AutoLogoutShellState();
+}
+
+class _AutoLogoutShellState extends State<AutoLogoutShell> with WidgetsBindingObserver {
+  Timer? _timer;
+  DateTime _ultimaAtividade = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _registrarAtividade();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final tempoParado = DateTime.now().difference(_ultimaAtividade);
+      if (tempoParado >= kTempoBloqueioPadrao) {
+        _bloquearPorInatividade();
+      } else {
+        _reiniciarTimer();
+      }
+    }
+  }
+
+  void _registrarAtividade() {
+    _ultimaAtividade = DateTime.now();
+    _reiniciarTimer();
+  }
+
+  void _reiniciarTimer() {
+    _timer?.cancel();
+    if (!widget.store.isAuthenticated) return;
+    _timer = Timer(kTempoBloqueioPadrao, _bloquearPorInatividade);
+  }
+
+  Future<void> _bloquearPorInatividade() async {
+    if (!mounted || !widget.store.isAuthenticated) return;
+
+    kNavigatorKey.currentState?.popUntil((route) => route.isFirst);
+    await widget.store.logout();
+    kScaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Sessão bloqueada por inatividade. Entre novamente.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _registrarAtividade(),
+      onPointerMove: (_) => _registrarAtividade(),
+      onPointerSignal: (_) => _registrarAtividade(),
+      child: widget.child,
     );
   }
 }
@@ -2165,42 +2270,18 @@ class ConfigPage extends StatelessWidget {
           ),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.data_object),
-              title: const Text('Estrutura importada do Excel'),
-              subtitle: const Text('Este protótipo já segue as abas BD_Pessoas, BD_Frequencia, BD_Donativos, BD_ExperienciaFe, BD_OnlineIdentificacao e BD_Referencias.'),
+              leading: Icon(store.isAuthenticated ? Icons.cloud_done_outlined : Icons.cloud_off_outlined),
+              title: const Text('Banco de dados'),
+              subtitle: Text(store.statusSupabase),
               isThreeLine: true,
             ),
           ),
           Card(
             child: ListTile(
-              leading: Icon(store.isAuthenticated ? Icons.cloud_done_outlined : Icons.cloud_off_outlined),
-              title: const Text('Supabase'),
-              subtitle: Text(store.statusSupabase),
-              isThreeLine: true,
+              leading: const Icon(Icons.lock_clock_outlined),
+              title: const Text('Bloqueio automático'),
+              subtitle: const Text('Após 15 minutos sem uso, o app volta para o login.'),
             ),
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: store.isSyncing
-                ? null
-                : () async {
-                    try {
-                      await store.enviarDadosLocaisParaSupabase();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Dados enviados para o Supabase.')),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(limparMensagemErro(e))),
-                        );
-                      }
-                    }
-                  },
-            icon: const Icon(Icons.cloud_upload_outlined),
-            label: const Text('Enviar dados locais para Supabase'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -2211,7 +2292,7 @@ class ConfigPage extends StatelessWidget {
                       await store.carregarDadosDoSupabase();
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Dados recarregados do Supabase.')),
+                          const SnackBar(content: Text('Dados atualizados do banco.')),
                         );
                       }
                     } catch (e) {
@@ -2223,7 +2304,7 @@ class ConfigPage extends StatelessWidget {
                     }
                   },
             icon: const Icon(Icons.cloud_sync_outlined),
-            label: const Text('Recarregar do Supabase'),
+            label: const Text('Atualizar dados do banco'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -2233,28 +2314,6 @@ class ConfigPage extends StatelessWidget {
             },
             icon: const Icon(Icons.logout),
             label: const Text('Sair da conta'),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: () async {
-              await store.importarDadosDoExcel();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Dados do Excel recarregados no app.')),
-                );
-              }
-            },
-            icon: const Icon(Icons.file_download_outlined),
-            label: const Text('Recarregar dados reais do Excel'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () async {
-              await store.resetLocal();
-              if (context.mounted) Navigator.pop(context);
-            },
-            icon: const Icon(Icons.restart_alt),
-            label: const Text('Limpar dados locais'),
           ),
         ],
       ),
@@ -3824,7 +3883,7 @@ class AppStore extends ChangeNotifier {
   Future<void> login({required String email, required String senha}) async {
     final response = await supabase.auth.signInWithPassword(email: email, password: senha);
     if (response.session == null) {
-      throw Exception('Não foi possível entrar. Confira e-mail e senha.');
+      throw Exception('Não foi possível entrar. Confira usuário e senha.');
     }
     isAuthenticated = true;
     statusSupabase = 'Conectado';
