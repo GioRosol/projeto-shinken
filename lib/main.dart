@@ -897,34 +897,111 @@ class PessoasPage extends StatefulWidget {
 
 class _PessoasPageState extends State<PessoasPage> {
   String busca = '';
+  String filtroTipo = kFiltroTodos;
+  String filtroSituacao = kFiltroTodos;
+  String filtroOutorga = kFiltroTodos;
 
   Future<void> abrirForm([Pessoa? pessoa]) async {
     await openSheet(context, PessoaForm(store: widget.store, initialValue: pessoa));
   }
 
+  bool _passaFiltros(Pessoa pessoa) {
+    final q = normalizeText(busca);
+    final texto = normalizeText([
+      pessoa.nome,
+      pessoa.codigoMembro,
+      pessoa.telefoneCelular,
+      pessoa.telefoneResidencial,
+      pessoa.bairro,
+      pessoa.cidade,
+    ].where((e) => e.trim().isNotEmpty).join(' '));
+
+    if (q.isNotEmpty && !texto.contains(q)) return false;
+    if (filtroTipo != kFiltroTodos && pessoa.tipoPessoaAtual != filtroTipo) return false;
+    if (filtroSituacao != kFiltroTodos && pessoa.situacaoMembro != filtroSituacao) return false;
+    if (filtroOutorga != kFiltroTodos && pessoa.tipoOutorga != filtroOutorga) return false;
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dados = widget.store.pessoas.where((p) => p.nome.toLowerCase().contains(busca.toLowerCase())).toList()
-      ..sort((a, b) => a.nome.compareTo(b.nome));
+    final dados = widget.store.pessoas.where(_passaFiltros).toList()
+      ..sort((a, b) => normalizeText(a.nome).compareTo(normalizeText(b.nome)));
+    final totalMembros = widget.store.pessoas.where((p) => p.codigoMembro.trim().isNotEmpty).length;
+    final totalSemCodigo = widget.store.pessoas.length - totalMembros;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         HeaderWithAction(
           title: 'Pessoas',
-          subtitle: 'Cadastro base para módulos e relatórios.',
+          subtitle: 'Base central com membros, frequentadores e 1ª vez.',
           buttonLabel: 'Adicionar',
           onPressed: () => abrirForm(),
         ),
-        SearchBox(onChanged: (v) => setState(() => busca = v)),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            InfoChip(icon: Icons.groups_outlined, label: '${widget.store.pessoas.length} pessoas'),
+            InfoChip(icon: Icons.verified_outlined, label: '$totalMembros membros'),
+            InfoChip(icon: Icons.person_add_alt_1_outlined, label: '$totalSemCodigo sem código'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SearchBox(hintText: 'Buscar por nome, código, telefone, bairro ou cidade', onChanged: (v) => setState(() => busca = v)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            SizedBox(
+              width: 180,
+              child: AppDropdown(
+                value: filtroTipo,
+                labelText: 'Tipo',
+                items: const [kFiltroTodos, ...kTiposPessoaFrequencia],
+                onChanged: (v) => setState(() => filtroTipo = v),
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: AppDropdown(
+                value: filtroSituacao,
+                labelText: 'Situação',
+                items: const [kFiltroTodos, 'ATI', 'AFA'],
+                onChanged: (v) => setState(() => filtroSituacao = v),
+              ),
+            ),
+            SizedBox(
+              width: 160,
+              child: AppDropdown(
+                value: filtroOutorga,
+                labelText: 'Outorga',
+                items: const [kFiltroTodos, 'OH', 'SH'],
+                onChanged: (v) => setState(() => filtroOutorga = v),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         for (final item in dados)
           Card(
             child: ListTile(
               onTap: () => abrirForm(item),
-              leading: PessoaAvatar(store: widget.store, pessoa: item, radius: 22),
-              title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text('${item.tipoPessoaAtual} • ${item.qtdPresencas} presença(s)'),
+              leading: PessoaAvatar(store: widget.store, pessoa: item, radius: 24),
+              title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.descricaoPrincipal, style: const TextStyle(color: Colors.black54)),
+                    if (item.descricaoContatoEndereco.isNotEmpty)
+                      Text(item.descricaoContatoEndereco, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black45, fontSize: 12)),
+                  ],
+                ),
+              ),
               trailing: PopupMenuButton<String>(
                 tooltip: 'Mais opções',
                 onSelected: (value) {
@@ -1060,6 +1137,43 @@ class _DepositoJcPageState extends State<DepositoJcPage> {
     );
   }
 
+  Widget linhaCopiavel({required String rotulo, required String valorVisivel, required String valorCopiar, required IconData icon}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F8F5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E7DF)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 17,
+            backgroundColor: kSoftGreen,
+            child: Icon(icon, size: 18, color: kAccent),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(rotulo, style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(valorVisivel.trim().isEmpty ? 'Não informado' : valorVisivel, style: const TextStyle(fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Copiar $rotulo',
+            onPressed: () => copiar(rotulo, valorCopiar),
+            icon: const Icon(Icons.copy_rounded, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lista = dados;
@@ -1076,7 +1190,7 @@ class _DepositoJcPageState extends State<DepositoJcPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Use os botões para copiar banco, data e valor separadamente e colar no depositojc.messianica.org.br. O comprovante abre em uma visualização rápida para conferência.',
+                    'Copie banco, data e valor campo por campo usando o ícone de copiar. Depois confira o comprovante e conclua o lançamento.',
                     style: TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 12),
@@ -1110,7 +1224,6 @@ class _DepositoJcPageState extends State<DepositoJcPage> {
                               Text(item.nome.isEmpty ? 'Sem nome' : item.nome, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                               const SizedBox(height: 4),
                               Text('${brDate.format(item.data)} • ${brMoney.format(item.valor)}', style: const TextStyle(color: Colors.black54)),
-                              Text('Banco: ${item.banco.trim().isEmpty ? 'Não informado' : item.banco}', style: const TextStyle(color: Colors.black54)),
                               if (item.temComprovante) Text('Comprovante: ${item.nomeComprovante}', style: const TextStyle(color: Colors.black54)),
                             ],
                           ),
@@ -1119,25 +1232,29 @@ class _DepositoJcPageState extends State<DepositoJcPage> {
                       ],
                     ),
                     const SizedBox(height: 14),
+                    linhaCopiavel(
+                      rotulo: 'Banco',
+                      valorVisivel: item.banco.trim().isEmpty ? 'Não informado' : item.banco,
+                      valorCopiar: item.banco,
+                      icon: Icons.account_balance_outlined,
+                    ),
+                    linhaCopiavel(
+                      rotulo: 'Data da transferência',
+                      valorVisivel: brDate.format(item.data),
+                      valorCopiar: brDate.format(item.data),
+                      icon: Icons.calendar_today_outlined,
+                    ),
+                    linhaCopiavel(
+                      rotulo: 'Valor',
+                      valorVisivel: brMoney.format(item.valor),
+                      valorCopiar: brMoneyInput.format(item.valor).trim(),
+                      icon: Icons.attach_money,
+                    ),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        OutlinedButton.icon(
-                          onPressed: () => copiar('Banco', item.banco),
-                          icon: const Icon(Icons.copy, size: 18),
-                          label: const Text('Copiar banco'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => copiar('Data', brDate.format(item.data)),
-                          icon: const Icon(Icons.copy, size: 18),
-                          label: const Text('Copiar data'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => copiar('Valor', brMoneyInput.format(item.valor).trim()),
-                          icon: const Icon(Icons.copy, size: 18),
-                          label: const Text('Copiar valor'),
-                        ),
                         OutlinedButton.icon(
                           onPressed: item.temComprovante ? () => visualizarComprovante(item) : null,
                           icon: const Icon(Icons.visibility_outlined, size: 18),
@@ -1146,7 +1263,7 @@ class _DepositoJcPageState extends State<DepositoJcPage> {
                         FilledButton.icon(
                           onPressed: () => alternarStatus(item),
                           icon: Icon(item.depositoLancado ? Icons.undo : Icons.check_circle_outline),
-                          label: Text(item.depositoLancado ? 'Voltar para pendente' : 'Marcar lançado'),
+                          label: Text(item.depositoLancado ? 'Voltar para pendente' : 'Concluir lançamento'),
                         ),
                       ],
                     ),
@@ -1937,7 +2054,7 @@ class _OnlineIdentificadoFormState extends State<OnlineIdentificadoForm> {
     await widget.store.upsertDonativo(Donativo(
       id: novoId,
       data: data,
-      nome: nome.text.trim(),
+      nome: nomeLimpoDeRotuloPessoa(nome.text),
       jc: kJcPadrao,
       tipoPessoa: pessoa?.tipoPessoaAtual ?? tipoPessoa,
       tipoDonativo: tipoDonativo,
@@ -2159,7 +2276,23 @@ class PessoaForm extends StatefulWidget {
 class _PessoaFormState extends State<PessoaForm> {
   final formKey = GlobalKey<FormState>();
   final nome = TextEditingController();
+  final codigoMembro = TextEditingController();
+  final nascimento = TextEditingController();
+  final outorga = TextEditingController();
+  final logradouro = TextEditingController();
+  final numero = TextEditingController();
+  final complemento = TextEditingController();
+  final bairro = TextEditingController();
+  final cidade = TextEditingController();
+  final estado = TextEditingController(text: 'MG');
+  final telefoneResidencial = TextEditingController();
+  final telefoneCelular = TextEditingController();
+
   String tipo = 'Membro';
+  String sexo = '';
+  String tipoOutorga = '';
+  String situacaoMembro = '';
+  String possuiSs = '';
   ComprovanteArquivo? fotoAtual;
   bool salvando = false;
 
@@ -2168,13 +2301,39 @@ class _PessoaFormState extends State<PessoaForm> {
     super.initState();
     final item = widget.initialValue;
     nome.text = item?.nome ?? '';
+    codigoMembro.text = item?.codigoMembro ?? '';
+    nascimento.text = item?.dataNascimento == null ? '' : brDate.format(item!.dataNascimento!);
+    outorga.text = item?.dataOutorga == null ? '' : brDate.format(item!.dataOutorga!);
+    logradouro.text = item?.logradouro ?? '';
+    numero.text = item?.numero ?? '';
+    complemento.text = item?.complemento ?? '';
+    bairro.text = item?.bairro ?? '';
+    cidade.text = item?.cidade ?? '';
+    estado.text = item?.estado.isNotEmpty == true ? item!.estado : 'MG';
+    telefoneResidencial.text = item?.telefoneResidencial ?? '';
+    telefoneCelular.text = item?.telefoneCelular ?? '';
     tipo = valorSeguro(item?.tipoPessoaAtual, kTiposPessoaFrequencia, fallback: 'Membro');
+    sexo = valorSeguro(item?.sexo, const ['', 'F', 'M'], fallback: '');
+    tipoOutorga = valorSeguro(item?.tipoOutorga, const ['', 'OH', 'SH'], fallback: '');
+    situacaoMembro = valorSeguro(item?.situacaoMembro, const ['', 'ATI', 'AFA'], fallback: '');
+    possuiSs = valorSeguro(item?.possuiSs, const ['', 'S', 'N'], fallback: '');
     fotoAtual = item?.fotoArquivo;
   }
 
   @override
   void dispose() {
     nome.dispose();
+    codigoMembro.dispose();
+    nascimento.dispose();
+    outorga.dispose();
+    logradouro.dispose();
+    numero.dispose();
+    complemento.dispose();
+    bairro.dispose();
+    cidade.dispose();
+    estado.dispose();
+    telefoneResidencial.dispose();
+    telefoneCelular.dispose();
     super.dispose();
   }
 
@@ -2200,6 +2359,13 @@ class _PessoaFormState extends State<PessoaForm> {
     }
   }
 
+  Future<void> selecionarData(TextEditingController controller) async {
+    final atual = tryParseBrDate(controller.text) ?? DateTime.now();
+    final selecionada = await showDatePicker(context: context, firstDate: DateTime(1900), lastDate: DateTime(2100), initialDate: atual);
+    if (selecionada == null) return;
+    setState(() => controller.text = brDate.format(selecionada));
+  }
+
   Future<void> salvar() async {
     final form = formKey.currentState;
     if (form == null || !form.validate()) return;
@@ -2222,6 +2388,21 @@ class _PessoaFormState extends State<PessoaForm> {
         qtdPresencas: widget.initialValue?.qtdPresencas ?? 0,
         jc: widget.initialValue?.jc ?? kJcPadrao,
         foto: fotoStorage,
+        codigoMembro: codigoMembro.text.trim(),
+        sexo: sexo,
+        dataNascimento: parseNullableDate(nascimento.text),
+        tipoOutorga: tipoOutorga,
+        dataOutorga: parseNullableDate(outorga.text),
+        situacaoMembro: situacaoMembro,
+        possuiSs: possuiSs,
+        logradouro: logradouro.text.trim(),
+        numero: numero.text.trim(),
+        complemento: complemento.text.trim(),
+        bairro: bairro.text.trim(),
+        cidade: cidade.text.trim(),
+        estado: estado.text.trim().toUpperCase(),
+        telefoneResidencial: telefoneResidencial.text.trim(),
+        telefoneCelular: telefoneCelular.text.trim(),
       );
 
       await widget.store.upsertPessoa(pessoa);
@@ -2236,27 +2417,28 @@ class _PessoaFormState extends State<PessoaForm> {
 
   @override
   Widget build(BuildContext context) {
+    final pessoaPreview = widget.initialValue?.copyWith(
+          nome: nome.text.trim().isEmpty ? widget.initialValue!.nome : nome.text.trim(),
+          tipoPessoaAtual: tipo,
+          foto: fotoAtual?.toStorageString() ?? '',
+        ) ??
+        Pessoa(
+          idPessoa: 0,
+          nome: nome.text.trim(),
+          tipoPessoaAtual: tipo,
+          primeiraPresenca: DateTime.now(),
+          ultimaPresenca: DateTime.now(),
+          qtdPresencas: 0,
+          jc: kJcPadrao,
+          foto: fotoAtual?.toStorageString() ?? '',
+        );
+
     return FormScaffold(
       title: widget.isEditing ? 'Editar pessoa' : 'Nova pessoa',
       formKey: formKey,
       onSave: salvar,
       children: [
-        Center(
-          child: PessoaAvatar(
-            store: widget.store,
-            pessoa: widget.initialValue?.copyWith(foto: fotoAtual?.toStorageString() ?? '') ?? Pessoa(
-              idPessoa: 0,
-              nome: nome.text.trim(),
-              tipoPessoaAtual: tipo,
-              primeiraPresenca: DateTime.now(),
-              ultimaPresenca: DateTime.now(),
-              qtdPresencas: 0,
-              jc: kJcPadrao,
-              foto: fotoAtual?.toStorageString() ?? '',
-            ),
-            radius: 46,
-          ),
-        ),
+        Center(child: PessoaAvatar(store: widget.store, pessoa: pessoaPreview, radius: 46)),
         const SizedBox(height: 10),
         Wrap(
           alignment: WrapAlignment.center,
@@ -2265,11 +2447,11 @@ class _PessoaFormState extends State<PessoaForm> {
           children: [
             OutlinedButton.icon(onPressed: () => selecionarFoto(camera: true), icon: const Icon(Icons.photo_camera_outlined), label: const Text('Tirar foto')),
             OutlinedButton.icon(onPressed: () => selecionarFoto(camera: false), icon: const Icon(Icons.photo_library_outlined), label: const Text('Galeria')),
-            if (fotoAtual != null)
-              TextButton.icon(onPressed: () => setState(() => fotoAtual = null), icon: const Icon(Icons.close), label: const Text('Remover foto')),
+            if (fotoAtual != null) TextButton.icon(onPressed: () => setState(() => fotoAtual = null), icon: const Icon(Icons.close), label: const Text('Remover foto')),
           ],
         ),
         const SizedBox(height: 16),
+        const SectionTitle('Dados básicos'),
         TextFormField(
           controller: nome,
           decoration: const InputDecoration(labelText: 'Nome'),
@@ -2277,12 +2459,60 @@ class _PessoaFormState extends State<PessoaForm> {
           validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o nome.' : null,
         ),
         const SizedBox(height: 12),
-        AppDropdown(value: tipo, items: kTiposPessoaFrequencia, onChanged: (v) => setState(() => tipo = v)),
+        AppDropdown(value: tipo, labelText: 'Tipo atual', items: kTiposPessoaFrequencia, onChanged: (v) => setState(() => tipo = v)),
+        const SizedBox(height: 12),
+        AppDropdown(value: sexo, labelText: 'Sexo', items: const ['', 'F', 'M'], onChanged: (v) => setState(() => sexo = v)),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: nascimento,
+          decoration: InputDecoration(labelText: 'Nascimento', suffixIcon: IconButton(icon: const Icon(Icons.calendar_today), onPressed: () => selecionarData(nascimento))),
+          inputFormatters: [BrDateTextInputFormatter()],
+        ),
+        const SizedBox(height: 20),
+        const SectionTitle('Dados de membro'),
+        TextFormField(controller: codigoMembro, decoration: const InputDecoration(labelText: 'Código do membro')),
+        const SizedBox(height: 12),
+        AppDropdown(value: tipoOutorga, labelText: 'Tipo de outorga', items: const ['', 'OH', 'SH'], onChanged: (v) => setState(() => tipoOutorga = v)),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: outorga,
+          decoration: InputDecoration(labelText: 'Data da outorga', suffixIcon: IconButton(icon: const Icon(Icons.calendar_today), onPressed: () => selecionarData(outorga))),
+          inputFormatters: [BrDateTextInputFormatter()],
+        ),
+        const SizedBox(height: 12),
+        AppDropdown(value: situacaoMembro, labelText: 'Situação do membro', items: const ['', 'ATI', 'AFA'], onChanged: (v) => setState(() => situacaoMembro = v)),
+        const SizedBox(height: 12),
+        AppDropdown(value: possuiSs, labelText: 'Sorei-Saishi/SS', items: const ['', 'S', 'N'], onChanged: (v) => setState(() => possuiSs = v)),
+        const SizedBox(height: 20),
+        const SectionTitle('Contato'),
+        TextFormField(controller: telefoneCelular, decoration: const InputDecoration(labelText: 'Telefone celular'), keyboardType: TextInputType.phone),
+        const SizedBox(height: 12),
+        TextFormField(controller: telefoneResidencial, decoration: const InputDecoration(labelText: 'Telefone residencial'), keyboardType: TextInputType.phone),
+        const SizedBox(height: 20),
+        const SectionTitle('Endereço'),
+        TextFormField(controller: logradouro, decoration: const InputDecoration(labelText: 'Logradouro')),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: TextFormField(controller: numero, decoration: const InputDecoration(labelText: 'Nº'))),
+            const SizedBox(width: 12),
+            Expanded(child: TextFormField(controller: complemento, decoration: const InputDecoration(labelText: 'Complemento'))),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextFormField(controller: bairro, decoration: const InputDecoration(labelText: 'Bairro')),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(flex: 3, child: TextFormField(controller: cidade, decoration: const InputDecoration(labelText: 'Cidade'))),
+            const SizedBox(width: 12),
+            Expanded(child: TextFormField(controller: estado, decoration: const InputDecoration(labelText: 'Estado'))),
+          ],
+        ),
       ],
     );
   }
 }
-
 
 class DonativoForm extends StatefulWidget {
   const DonativoForm({super.key, required this.store, this.initialValue});
@@ -2520,7 +2750,7 @@ class _DonativoFormState extends State<DonativoForm> {
       );
     }
 
-    final nomeFinal = ehOnlineOficial ? 'Online oficial acumulado' : nome.text.trim();
+    final nomeFinal = ehOnlineOficial ? 'Online oficial acumulado' : nomeLimpoDeRotuloPessoa(nome.text);
     final tipoOrigemFinal = ehOnlineOficial ? '' : tipoOrigemNome;
     final tipoPessoaFinal = ehOnlineOficial
         ? ''
@@ -2860,7 +3090,7 @@ class _FrequenciaContinuaPageState extends State<FrequenciaContinuaPage> {
     final data = tryParseBrDate(dataController.text)!;
     final pessoa = widget.store.findPessoaByName(nome.text);
     final categoriaHistorica = pessoa?.tipoPessoaAtual ?? tipoPessoa;
-    final nomeAtual = nome.text.trim();
+    final nomeAtual = nomeLimpoDeRotuloPessoa(nome.text);
 
     final duplicado = widget.store.existeFrequenciaDuplicada(nome: nomeAtual, data: data, tipoEvento: tipoEvento);
     if (duplicado) {
@@ -3084,7 +3314,7 @@ class _FrequenciaFormState extends State<FrequenciaForm> {
     final categoriaHistorica = pessoa?.tipoPessoaAtual ?? tipoPessoa;
 
     final duplicado = widget.store.existeFrequenciaDuplicada(
-      nome: nome.text,
+      nome: nomeLimpoDeRotuloPessoa(nome.text),
       data: dataLancamento,
       tipoEvento: tipoEvento,
       ignorarId: widget.initialValue?.id,
@@ -3101,7 +3331,7 @@ class _FrequenciaFormState extends State<FrequenciaForm> {
       id: widget.initialValue?.id ?? widget.store.nextFrequenciaId(),
       data: dataLancamento,
       tipoEvento: tipoEvento,
-      nome: nome.text.trim(),
+      nome: nomeLimpoDeRotuloPessoa(nome.text),
       tipoPessoaInformado: categoriaHistorica,
       tipoPessoaAtual: categoriaHistorica,
       jc: widget.initialValue?.jc ?? kJcPadrao,
@@ -3304,7 +3534,7 @@ class _ExperienciaFormState extends State<ExperienciaForm> {
         dataRegistro: widget.initialValue?.dataRegistro ?? DateTime.now(),
         dataExperiencia: tryParseBrDate(dataController.text) ?? DateTime.now(),
         idPessoa: idPessoa,
-        nome: nome.text.trim(),
+        nome: nomeLimpoDeRotuloPessoa(nome.text),
         tipoPessoa: tipoPessoa,
         jc: kJcPadrao,
         titulo: titulo.text.trim(),
@@ -3837,7 +4067,7 @@ class AppStore extends ChangeNotifier {
   }
 
   bool existeFrequenciaDuplicada({required String nome, required DateTime data, required String tipoEvento, int? ignorarId}) {
-    final alvoNome = normalizeText(nome);
+    final alvoNome = normalizeText(nomeLimpoDeRotuloPessoa(nome));
     final alvoData = dateOnly(data);
     final alvoEvento = normalizeText(tipoEvento);
     return frequencias.any((item) {
@@ -3889,7 +4119,15 @@ class AppStore extends ChangeNotifier {
   }
 
   Pessoa? findPessoaByName(String nome) {
-    final alvo = normalizeText(nome);
+    final alvoOriginal = nome.trim();
+    final codigo = codigoMembroFromRotulo(alvoOriginal);
+    if (codigo.isNotEmpty) {
+      for (final pessoa in pessoas) {
+        if (pessoa.codigoMembro == codigo) return pessoa;
+      }
+    }
+
+    final alvo = normalizeText(nomeLimpoDeRotuloPessoa(alvoOriginal));
     for (final pessoa in pessoas) {
       if (normalizeText(pessoa.nome) == alvo) return pessoa;
     }
@@ -3914,9 +4152,25 @@ class AppStore extends ChangeNotifier {
   }
 
   List<String> nomesPessoas() {
-    final nomes = pessoas.map((item) => item.nome.trim()).where((item) => item.isNotEmpty).toSet().toList();
-    nomes.sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
-    return nomes;
+    final nomesNormalizados = <String, int>{};
+    for (final pessoa in pessoas) {
+      final key = normalizeText(pessoa.nome);
+      if (key.isEmpty) continue;
+      nomesNormalizados[key] = (nomesNormalizados[key] ?? 0) + 1;
+    }
+
+    final opcoes = pessoas.where((item) => item.nome.trim().isNotEmpty).map((item) {
+      final duplicado = (nomesNormalizados[normalizeText(item.nome)] ?? 0) > 1;
+      if (!duplicado && item.codigoMembro.trim().isEmpty) return item.nome.trim();
+      final detalhes = <String>[];
+      if (item.codigoMembro.trim().isNotEmpty) detalhes.add('Cód. ${item.codigoMembro}');
+      if (item.dataNascimento != null) detalhes.add('Nasc. ${brDate.format(item.dataNascimento!)}');
+      if (item.tipoOutorga.trim().isNotEmpty) detalhes.add(item.tipoOutorga);
+      return detalhes.isEmpty ? item.nome.trim() : '${item.nome.trim()} • ${detalhes.join(' • ')}';
+    }).toList();
+
+    opcoes.sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
+    return opcoes;
   }
 
   List<String> nomesReferencias() {
@@ -4032,7 +4286,32 @@ class AppStore extends ChangeNotifier {
 
 
 class Pessoa {
-  Pessoa({required this.idPessoa, required this.nome, required this.tipoPessoaAtual, required this.primeiraPresenca, required this.ultimaPresenca, required this.qtdPresencas, required this.jc, this.foto = ''});
+  Pessoa({
+    required this.idPessoa,
+    required this.nome,
+    required this.tipoPessoaAtual,
+    required this.primeiraPresenca,
+    required this.ultimaPresenca,
+    required this.qtdPresencas,
+    required this.jc,
+    this.foto = '',
+    this.codigoMembro = '',
+    this.sexo = '',
+    this.dataNascimento,
+    this.tipoOutorga = '',
+    this.dataOutorga,
+    this.situacaoMembro = '',
+    this.possuiSs = '',
+    this.logradouro = '',
+    this.numero = '',
+    this.complemento = '',
+    this.bairro = '',
+    this.cidade = '',
+    this.estado = '',
+    this.telefoneResidencial = '',
+    this.telefoneCelular = '',
+  });
+
   final int idPessoa;
   final String nome;
   final String tipoPessoaAtual;
@@ -4041,10 +4320,71 @@ class Pessoa {
   final int qtdPresencas;
   final String jc;
   final String foto;
+  final String codigoMembro;
+  final String sexo;
+  final DateTime? dataNascimento;
+  final String tipoOutorga;
+  final DateTime? dataOutorga;
+  final String situacaoMembro;
+  final String possuiSs;
+  final String logradouro;
+  final String numero;
+  final String complemento;
+  final String bairro;
+  final String cidade;
+  final String estado;
+  final String telefoneResidencial;
+  final String telefoneCelular;
 
   ComprovanteArquivo? get fotoArquivo => ComprovanteArquivo.fromStorageString(foto);
 
-  Pessoa copyWith({String? nome, String? tipoPessoaAtual, DateTime? primeiraPresenca, DateTime? ultimaPresenca, int? qtdPresencas, String? jc, String? foto}) {
+  String get situacaoMembroLabel {
+    if (situacaoMembro == 'ATI') return 'Ativo';
+    if (situacaoMembro == 'AFA') return 'Afastado';
+    return '';
+  }
+
+  String get descricaoPrincipal {
+    final partes = <String>[tipoPessoaAtual];
+    if (codigoMembro.trim().isNotEmpty) partes.add('Cód. $codigoMembro');
+    if (tipoOutorga.trim().isNotEmpty) partes.add(tipoOutorga);
+    if (situacaoMembroLabel.isNotEmpty) partes.add(situacaoMembroLabel);
+    if (dataNascimento != null) partes.add('Nasc. ${brDate.format(dataNascimento!)}');
+    return partes.where((e) => e.trim().isNotEmpty).join(' • ');
+  }
+
+  String get descricaoContatoEndereco {
+    final partes = <String>[];
+    if (telefoneCelular.trim().isNotEmpty) partes.add(telefoneCelular);
+    if (bairro.trim().isNotEmpty) partes.add(bairro);
+    if (cidade.trim().isNotEmpty) partes.add(cidade);
+    return partes.join(' • ');
+  }
+
+  Pessoa copyWith({
+    String? nome,
+    String? tipoPessoaAtual,
+    DateTime? primeiraPresenca,
+    DateTime? ultimaPresenca,
+    int? qtdPresencas,
+    String? jc,
+    String? foto,
+    String? codigoMembro,
+    String? sexo,
+    DateTime? dataNascimento,
+    String? tipoOutorga,
+    DateTime? dataOutorga,
+    String? situacaoMembro,
+    String? possuiSs,
+    String? logradouro,
+    String? numero,
+    String? complemento,
+    String? bairro,
+    String? cidade,
+    String? estado,
+    String? telefoneResidencial,
+    String? telefoneCelular,
+  }) {
     return Pessoa(
       idPessoa: idPessoa,
       nome: nome ?? this.nome,
@@ -4054,6 +4394,21 @@ class Pessoa {
       qtdPresencas: qtdPresencas ?? this.qtdPresencas,
       jc: jc ?? this.jc,
       foto: foto ?? this.foto,
+      codigoMembro: codigoMembro ?? this.codigoMembro,
+      sexo: sexo ?? this.sexo,
+      dataNascimento: dataNascimento ?? this.dataNascimento,
+      tipoOutorga: tipoOutorga ?? this.tipoOutorga,
+      dataOutorga: dataOutorga ?? this.dataOutorga,
+      situacaoMembro: situacaoMembro ?? this.situacaoMembro,
+      possuiSs: possuiSs ?? this.possuiSs,
+      logradouro: logradouro ?? this.logradouro,
+      numero: numero ?? this.numero,
+      complemento: complemento ?? this.complemento,
+      bairro: bairro ?? this.bairro,
+      cidade: cidade ?? this.cidade,
+      estado: estado ?? this.estado,
+      telefoneResidencial: telefoneResidencial ?? this.telefoneResidencial,
+      telefoneCelular: telefoneCelular ?? this.telefoneCelular,
     );
   }
 
@@ -4066,6 +4421,21 @@ class Pessoa {
         'qtdPresencas': qtdPresencas,
         'jc': jc,
         'foto': foto,
+        'codigoMembro': codigoMembro,
+        'sexo': sexo,
+        'dataNascimento': dataNascimento?.toIso8601String(),
+        'tipoOutorga': tipoOutorga,
+        'dataOutorga': dataOutorga?.toIso8601String(),
+        'situacaoMembro': situacaoMembro,
+        'possuiSs': possuiSs,
+        'logradouro': logradouro,
+        'numero': numero,
+        'complemento': complemento,
+        'bairro': bairro,
+        'cidade': cidade,
+        'estado': estado,
+        'telefoneResidencial': telefoneResidencial,
+        'telefoneCelular': telefoneCelular,
       };
 
   factory Pessoa.fromJson(Map<String, dynamic> json) => Pessoa(
@@ -4077,6 +4447,21 @@ class Pessoa {
         qtdPresencas: json['qtdPresencas'] ?? 0,
         jc: json['jc'] ?? kJcPadrao,
         foto: json['foto'] ?? '',
+        codigoMembro: (json['codigoMembro'] ?? '').toString(),
+        sexo: (json['sexo'] ?? '').toString(),
+        dataNascimento: parseNullableDate(json['dataNascimento']),
+        tipoOutorga: (json['tipoOutorga'] ?? '').toString(),
+        dataOutorga: parseNullableDate(json['dataOutorga']),
+        situacaoMembro: (json['situacaoMembro'] ?? '').toString(),
+        possuiSs: (json['possuiSs'] ?? '').toString(),
+        logradouro: (json['logradouro'] ?? '').toString(),
+        numero: (json['numero'] ?? '').toString(),
+        complemento: (json['complemento'] ?? '').toString(),
+        bairro: (json['bairro'] ?? '').toString(),
+        cidade: (json['cidade'] ?? '').toString(),
+        estado: (json['estado'] ?? '').toString(),
+        telefoneResidencial: (json['telefoneResidencial'] ?? '').toString(),
+        telefoneCelular: (json['telefoneCelular'] ?? '').toString(),
       );
 
   Map<String, dynamic> toSupabase() {
@@ -4092,6 +4477,21 @@ class Pessoa {
       'foto_path': arquivo?.path ?? '',
       'foto_nome': arquivo?.nome ?? '',
       'foto_tipo': arquivo == null ? '' : contentTypeForFile(arquivo.nome),
+      'codigo_membro': codigoMembro,
+      'sexo': sexo,
+      'data_nascimento': dataNascimento == null ? null : sqlDate(dataNascimento!),
+      'tipo_outorga': tipoOutorga,
+      'data_outorga': dataOutorga == null ? null : sqlDate(dataOutorga!),
+      'situacao_membro': situacaoMembro,
+      'possui_ss': possuiSs,
+      'logradouro': logradouro,
+      'numero': numero,
+      'complemento': complemento,
+      'bairro': bairro,
+      'cidade': cidade,
+      'estado': estado,
+      'telefone_residencial': telefoneResidencial,
+      'telefone_celular': telefoneCelular,
     };
   }
 
@@ -4118,6 +4518,21 @@ class Pessoa {
       qtdPresencas: json['qtd_presencas'] is num ? (json['qtd_presencas'] as num).toInt() : 0,
       jc: (json['jc'] ?? kJcPadrao).toString(),
       foto: foto,
+      codigoMembro: (json['codigo_membro'] ?? '').toString(),
+      sexo: (json['sexo'] ?? '').toString(),
+      dataNascimento: parseNullableDate(json['data_nascimento']),
+      tipoOutorga: (json['tipo_outorga'] ?? '').toString(),
+      dataOutorga: parseNullableDate(json['data_outorga']),
+      situacaoMembro: (json['situacao_membro'] ?? '').toString(),
+      possuiSs: (json['possui_ss'] ?? '').toString(),
+      logradouro: (json['logradouro'] ?? '').toString(),
+      numero: (json['numero'] ?? '').toString(),
+      complemento: (json['complemento'] ?? '').toString(),
+      bairro: (json['bairro'] ?? '').toString(),
+      cidade: (json['cidade'] ?? '').toString(),
+      estado: (json['estado'] ?? '').toString(),
+      telefoneResidencial: (json['telefone_residencial'] ?? '').toString(),
+      telefoneCelular: (json['telefone_celular'] ?? '').toString(),
     );
   }
 }
@@ -4675,6 +5090,18 @@ DateTime? tryParseBrDate(String raw) {
 }
 
 String sqlDate(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+
+String codigoMembroFromRotulo(String raw) {
+  final match = RegExp(r'Cód\.\s*([0-9]+)').firstMatch(raw);
+  return match?.group(1) ?? '';
+}
+
+String nomeLimpoDeRotuloPessoa(String raw) {
+  final marker = raw.indexOf(' • Cód.');
+  if (marker >= 0) return raw.substring(0, marker).trim();
+  return raw.trim();
+}
+
 
 DateTime dateOnly(DateTime value) => DateTime(value.year, value.month, value.day);
 
