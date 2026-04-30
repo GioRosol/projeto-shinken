@@ -19,6 +19,10 @@ const kTextDark = Color(0xFF1F1F1F);
 const kSupabaseUrl = 'https://efjepzydpzmsgokpzhxm.supabase.co';
 const kSupabasePublishableKey = 'sb_publishable_nwJNB7j7JB3Qwka7PpiHzA_a0XHrJbT';
 const kComprovantesBucket = 'comprovantes';
+const kExperienciasBucket = 'experiencias-fe';
+const kPessoasFotosBucket = 'pessoas-fotos';
+const kMaxArquivoExperienciaBytes = 5 * 1024 * 1024;
+const kMaxFotoPessoaBytes = 2 * 1024 * 1024;
 
 final brDate = DateFormat('dd/MM/yyyy');
 final brMoney = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -35,6 +39,8 @@ const kSubtipoOnlineIdentificado = 'Identificado';
 const kTiposOrigemNomeDonativo = ['Pessoa', 'Referencia'];
 const kTiposEventoPadrao = ['Dia a dia', 'Culto Mensal', 'Oração pela Construção do Paraíso no Lar'];
 const kBancosTransferencia = ['Itaú', 'Banco do Brasil', 'Bradesco'];
+const kStatusExperiencia = ['Em produção', 'Revisar', 'Pronta', 'Apresentada', 'Arquivada'];
+const kTagsExperiencia = ['Johrei', 'Gratidão', 'Doença', 'Pobreza', 'Conflito', 'Família', 'Trabalho', 'Belo', 'Encaminhamento', 'Milagre', 'Mudança interior', 'Dedicação'];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -892,6 +898,10 @@ class PessoasPage extends StatefulWidget {
 class _PessoasPageState extends State<PessoasPage> {
   String busca = '';
 
+  Future<void> abrirForm([Pessoa? pessoa]) async {
+    await openSheet(context, PessoaForm(store: widget.store, initialValue: pessoa));
+  }
+
   @override
   Widget build(BuildContext context) {
     final dados = widget.store.pessoas.where((p) => p.nome.toLowerCase().contains(busca.toLowerCase())).toList()
@@ -904,17 +914,35 @@ class _PessoasPageState extends State<PessoasPage> {
           title: 'Pessoas',
           subtitle: 'Cadastro base para módulos e relatórios.',
           buttonLabel: 'Adicionar',
-          onPressed: () => openSheet(context, PessoaForm(store: widget.store)),
+          onPressed: () => abrirForm(),
         ),
         SearchBox(onChanged: (v) => setState(() => busca = v)),
         const SizedBox(height: 12),
         for (final item in dados)
           Card(
             child: ListTile(
-              leading: const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.person, color: kAccent)),
+              onTap: () => abrirForm(item),
+              leading: PessoaAvatar(store: widget.store, pessoa: item, radius: 22),
               title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Text('${item.tipoPessoaAtual} • ${item.qtdPresencas} presença(s)'),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: PopupMenuButton<String>(
+                tooltip: 'Mais opções',
+                onSelected: (value) {
+                  if (value == 'editar') abrirForm(item);
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'editar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_outlined, size: 18),
+                        SizedBox(width: 8),
+                        Text('Editar'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         EmptyState(show: dados.isEmpty, message: 'Nenhuma pessoa encontrada.'),
@@ -1134,10 +1162,11 @@ class _DepositoJcPageState extends State<DepositoJcPage> {
 }
 
 class ComprovantePreviewDialog extends StatelessWidget {
-  const ComprovantePreviewDialog({super.key, required this.arquivo, required this.link});
+  const ComprovantePreviewDialog({super.key, required this.arquivo, required this.link, this.titulo = 'Comprovante'});
 
   final ComprovanteArquivo arquivo;
   final String link;
+  final String titulo;
 
   bool get _ehImagem {
     final ext = arquivo.extensao.toLowerCase().replaceAll('.', '').trim();
@@ -1174,7 +1203,7 @@ class ComprovantePreviewDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Comprovante', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                        Text(titulo, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                         Text(arquivo.nome, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
                       ],
                     ),
@@ -1195,7 +1224,7 @@ class ComprovantePreviewDialog extends StatelessWidget {
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Container(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           child: InteractiveViewer(
                             minScale: 0.5,
                             maxScale: 5,
@@ -1264,12 +1293,112 @@ class ComprovantePreviewDialog extends StatelessWidget {
   }
 }
 
-class ExperienciasPage extends StatelessWidget {
+
+class ExperienciasPage extends StatefulWidget {
   const ExperienciasPage({super.key, required this.store});
   final AppStore store;
 
   @override
+  State<ExperienciasPage> createState() => _ExperienciasPageState();
+}
+
+class _ExperienciasPageState extends State<ExperienciasPage> {
+  final buscaController = TextEditingController();
+  String busca = '';
+  String statusFiltro = kFiltroTodos;
+  String tagFiltro = kFiltroTodos;
+
+  List<String> get tagsDisponiveis {
+    final tags = <String>{...kTagsExperiencia};
+    for (final item in widget.store.experiencias) {
+      tags.addAll(item.tags);
+    }
+    final lista = tags.where((e) => e.trim().isNotEmpty).toList();
+    lista.sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
+    return [kFiltroTodos, ...lista];
+  }
+
+  List<String> get statusDisponiveis {
+    final status = <String>{...kStatusExperiencia};
+    for (final item in widget.store.experiencias) {
+      if (item.status.trim().isNotEmpty) status.add(item.status.trim());
+    }
+    final lista = status.toList();
+    lista.sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
+    return [kFiltroTodos, ...lista];
+  }
+
+  List<ExperienciaFe> get dadosFiltrados {
+    final termo = normalizeText(busca);
+    final dados = widget.store.experiencias.where((item) {
+      final texto = normalizeText('${item.nome} ${item.titulo} ${item.resumo} ${item.tema} ${item.observacao}');
+      final matchBusca = termo.isEmpty || texto.contains(termo);
+      final matchStatus = statusFiltro == kFiltroTodos || item.status == statusFiltro;
+      final matchTag = tagFiltro == kFiltroTodos || item.tags.map(normalizeText).contains(normalizeText(tagFiltro));
+      return matchBusca && matchStatus && matchTag;
+    }).toList()
+      ..sort((a, b) => b.dataRegistro.compareTo(a.dataRegistro));
+    return dados;
+  }
+
+  @override
+  void dispose() {
+    buscaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> abrirForm([ExperienciaFe? item]) async {
+    await openSheet(context, ExperienciaForm(store: widget.store, initialValue: item));
+  }
+
+  Future<void> excluir(ExperienciaFe item) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir experiência?'),
+        content: Text('Deseja excluir a experiência de ${item.nome}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    try {
+      await widget.store.deleteExperiencia(item.id);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Experiência excluída.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    }
+  }
+
+  Future<void> visualizarArquivo(ExperienciaFe item) async {
+    final arquivo = item.arquivoExperiencia;
+    if (arquivo == null) return;
+    try {
+      final link = await widget.store.criarLinkTemporarioExperiencia(item);
+      if (link == null || link.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arquivo sem link disponível.')));
+        return;
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => ComprovantePreviewDialog(
+          arquivo: arquivo,
+          link: link,
+          titulo: 'Arquivo da experiência',
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dados = dadosFiltrados;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Experiência de Fé')),
       body: ListView(
@@ -1277,19 +1406,139 @@ class ExperienciasPage extends StatelessWidget {
         children: [
           HeaderWithAction(
             title: 'Experiências de Fé',
-            subtitle: 'Cadastro, resumo, status, envio e apresentação.',
+            subtitle: '${widget.store.experiencias.length} experiência(s) cadastrada(s)',
             buttonLabel: 'Nova',
-            onPressed: () => openSheet(context, ExperienciaForm(store: store)),
+            onPressed: () => abrirForm(),
           ),
-          for (final e in store.experiencias)
-            Card(
-              child: ListTile(
-                leading: const CircleAvatar(backgroundColor: kSoftGreen, child: Icon(Icons.auto_stories, color: kAccent)),
-                title: Text(e.titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('${e.nome} • ${e.status}'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Busca e filtros', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 12),
+                  SearchBox(
+                    controller: buscaController,
+                    hintText: 'Buscar por nome, resumo ou tag',
+                    onChanged: (v) => setState(() => busca = v),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 220,
+                        child: AppDropdown(
+                          value: statusFiltro,
+                          labelText: 'Status',
+                          items: statusDisponiveis,
+                          onChanged: (v) => setState(() => statusFiltro = v),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 220,
+                        child: AppDropdown(
+                          value: tagFiltro,
+                          labelText: 'Tag',
+                          items: tagsDisponiveis,
+                          onChanged: (v) => setState(() => tagFiltro = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          EmptyState(show: store.experiencias.isEmpty, message: 'Nenhuma experiência cadastrada.'),
+          ),
+          const SizedBox(height: 12),
+          for (final item in dados)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PessoaAvatar(store: widget.store, pessoa: widget.store.findPessoaById(item.idPessoa) ?? widget.store.findPessoaByName(item.nome), radius: 22, fallbackText: item.nome),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.titulo.isEmpty ? 'Sem título' : item.titulo, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                              const SizedBox(height: 4),
+                              Text(item.nome.isEmpty ? 'Sem pessoa' : item.nome, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              if (item.resumo.trim().isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(item.resumo, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Chip(label: Text(item.status.isEmpty ? 'Em produção' : item.status)),
+                      ],
+                    ),
+                    if (item.tags.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [for (final tag in item.tags) Chip(label: Text(tag))],
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: item.temArquivo ? () => visualizarArquivo(item) : null,
+                          icon: const Icon(Icons.visibility_outlined, size: 18),
+                          label: const Text('Ver arquivo'),
+                        ),
+                        const Spacer(),
+                        PopupMenuButton<String>(
+                          tooltip: 'Mais opções',
+                          onSelected: (value) async {
+                            if (value == 'editar') {
+                              await abrirForm(item);
+                            }
+                            if (value == 'excluir') {
+                              await excluir(item);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'editar',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Editar'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'excluir',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Excluir'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          EmptyState(show: dados.isEmpty, message: 'Nenhuma experiência encontrada.'),
         ],
       ),
     );
@@ -1897,38 +2146,139 @@ class ConfigPage extends StatelessWidget {
 }
 
 class PessoaForm extends StatefulWidget {
-  const PessoaForm({super.key, required this.store});
+  const PessoaForm({super.key, required this.store, this.initialValue});
   final AppStore store;
+  final Pessoa? initialValue;
+
+  bool get isEditing => initialValue != null;
 
   @override
   State<PessoaForm> createState() => _PessoaFormState();
 }
 
 class _PessoaFormState extends State<PessoaForm> {
+  final formKey = GlobalKey<FormState>();
   final nome = TextEditingController();
   String tipo = 'Membro';
+  ComprovanteArquivo? fotoAtual;
+  bool salvando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.initialValue;
+    nome.text = item?.nome ?? '';
+    tipo = valorSeguro(item?.tipoPessoaAtual, kTiposPessoaFrequencia, fallback: 'Membro');
+    fotoAtual = item?.fotoArquivo;
+  }
+
+  @override
+  void dispose() {
+    nome.dispose();
+    super.dispose();
+  }
+
+  Future<void> selecionarFoto({required bool camera}) async {
+    try {
+      final picker = ImagePicker();
+      final foto = await picker.pickImage(source: camera ? ImageSource.camera : ImageSource.gallery, imageQuality: 78, maxWidth: 1200);
+      if (foto == null) return;
+      final bytes = await foto.readAsBytes();
+      if (bytes.length > kMaxFotoPessoaBytes) throw Exception('Foto maior que 2 MB. Escolha uma imagem mais leve.');
+      final nomeArquivo = foto.name.trim().isEmpty ? 'foto_${DateTime.now().millisecondsSinceEpoch}.jpg' : foto.name;
+      setState(() {
+        fotoAtual = ComprovanteArquivo(
+          nome: nomeArquivo,
+          extensao: extensaoArquivo(nomeArquivo, fallback: 'jpg'),
+          tamanhoBytes: bytes.length,
+          base64: base64Encode(bytes),
+          dataAnexo: DateTime.now(),
+        );
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    }
+  }
+
+  Future<void> salvar() async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate()) return;
+    if (salvando) return;
+
+    setState(() => salvando = true);
+    try {
+      final id = widget.initialValue?.idPessoa ?? widget.store.nextPessoaId();
+      var fotoStorage = fotoAtual?.toStorageString() ?? '';
+      if (fotoAtual != null && fotoAtual!.base64.isNotEmpty) {
+        fotoStorage = await widget.store.salvarFotoPessoaNoSupabase(pessoaId: id, foto: fotoAtual!);
+      }
+
+      final pessoa = Pessoa(
+        idPessoa: id,
+        nome: nome.text.trim(),
+        tipoPessoaAtual: tipo,
+        primeiraPresenca: widget.initialValue?.primeiraPresenca ?? DateTime.now(),
+        ultimaPresenca: widget.initialValue?.ultimaPresenca ?? DateTime.now(),
+        qtdPresencas: widget.initialValue?.qtdPresencas ?? 0,
+        jc: widget.initialValue?.jc ?? kJcPadrao,
+        foto: fotoStorage,
+      );
+
+      await widget.store.upsertPessoa(pessoa);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    } finally {
+      if (mounted) setState(() => salvando = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return FormScaffold(
-      title: 'Nova pessoa',
+      title: widget.isEditing ? 'Editar pessoa' : 'Nova pessoa',
+      formKey: formKey,
+      onSave: salvar,
       children: [
-        TextField(controller: nome, decoration: const InputDecoration(labelText: 'Nome')),
+        Center(
+          child: PessoaAvatar(
+            store: widget.store,
+            pessoa: widget.initialValue?.copyWith(foto: fotoAtual?.toStorageString() ?? '') ?? Pessoa(
+              idPessoa: 0,
+              nome: nome.text.trim(),
+              tipoPessoaAtual: tipo,
+              primeiraPresenca: DateTime.now(),
+              ultimaPresenca: DateTime.now(),
+              qtdPresencas: 0,
+              jc: kJcPadrao,
+              foto: fotoAtual?.toStorageString() ?? '',
+            ),
+            radius: 46,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(onPressed: () => selecionarFoto(camera: true), icon: const Icon(Icons.photo_camera_outlined), label: const Text('Tirar foto')),
+            OutlinedButton.icon(onPressed: () => selecionarFoto(camera: false), icon: const Icon(Icons.photo_library_outlined), label: const Text('Galeria')),
+            if (fotoAtual != null)
+              TextButton.icon(onPressed: () => setState(() => fotoAtual = null), icon: const Icon(Icons.close), label: const Text('Remover foto')),
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: nome,
+          decoration: const InputDecoration(labelText: 'Nome'),
+          onChanged: (_) => setState(() {}),
+          validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o nome.' : null,
+        ),
         const SizedBox(height: 12),
-        AppDropdown(value: tipo, items: const ['Membro', 'Frequentador', '1ª vez'], onChanged: (v) => setState(() => tipo = v)),
+        AppDropdown(value: tipo, items: kTiposPessoaFrequencia, onChanged: (v) => setState(() => tipo = v)),
       ],
-      onSave: () {
-        widget.store.addPessoa(Pessoa(
-          idPessoa: widget.store.nextPessoaId(),
-          nome: nome.text.trim(),
-          tipoPessoaAtual: tipo,
-          primeiraPresenca: DateTime.now(),
-          ultimaPresenca: DateTime.now(),
-          qtdPresencas: 0,
-          jc: kJcPadrao,
-        ));
-        Navigator.pop(context);
-      },
     );
   }
 }
@@ -2809,56 +3159,263 @@ class _FrequenciaFormState extends State<FrequenciaForm> {
 }
 
 
+
 class ExperienciaForm extends StatefulWidget {
-  const ExperienciaForm({super.key, required this.store});
+  const ExperienciaForm({super.key, required this.store, this.initialValue});
   final AppStore store;
+  final ExperienciaFe? initialValue;
+
+  bool get isEditing => initialValue != null;
 
   @override
   State<ExperienciaForm> createState() => _ExperienciaFormState();
 }
 
 class _ExperienciaFormState extends State<ExperienciaForm> {
+  final formKey = GlobalKey<FormState>();
   final nome = TextEditingController();
   final titulo = TextEditingController();
   final resumo = TextEditingController();
-  String status = 'Rascunho';
+  final observacao = TextEditingController();
+  final dataController = TextEditingController();
+  String status = 'Em produção';
+  String tipoPessoa = 'Membro';
+  int idPessoa = 0;
+  final tagsSelecionadas = <String>{};
+  ComprovanteArquivo? arquivoAtual;
+  bool salvando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.initialValue;
+    nome.text = item?.nome ?? '';
+    titulo.text = item?.titulo ?? '';
+    resumo.text = item?.resumo ?? '';
+    observacao.text = item?.observacao ?? '';
+    dataController.text = brDate.format(item?.dataExperiencia ?? DateTime.now());
+    status = valorSeguro(item?.status, kStatusExperiencia, fallback: 'Em produção');
+    tipoPessoa = valorSeguro(item?.tipoPessoa, kTiposPessoaFrequencia, fallback: 'Membro');
+    idPessoa = item?.idPessoa ?? 0;
+    tagsSelecionadas.addAll(item?.tags ?? const []);
+    arquivoAtual = item?.arquivoExperiencia;
+  }
+
+  @override
+  void dispose() {
+    nome.dispose();
+    titulo.dispose();
+    resumo.dispose();
+    observacao.dispose();
+    dataController.dispose();
+    super.dispose();
+  }
+
+  Future<void> selecionarData() async {
+    final atual = tryParseBrDate(dataController.text) ?? DateTime.now();
+    final selecionada = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      initialDate: atual,
+    );
+    if (selecionada == null) return;
+    setState(() => dataController.text = brDate.format(selecionada));
+  }
+
+  void preencherPessoa(String raw) {
+    final pessoa = widget.store.findPessoaByName(raw);
+    if (pessoa != null) {
+      idPessoa = pessoa.idPessoa;
+      tipoPessoa = valorSeguro(pessoa.tipoPessoaAtual, kTiposPessoaFrequencia, fallback: tipoPessoa);
+    }
+  }
+
+  Future<void> selecionarPessoa() async {
+    final selecionado = await pickStringFromList(context, title: 'Selecionar pessoa', options: widget.store.nomesPessoas());
+    if (selecionado == null) return;
+    setState(() {
+      nome.text = selecionado;
+      preencherPessoa(selecionado);
+    });
+  }
+
+  Future<void> selecionarArquivo({required bool imagem, bool camera = false}) async {
+    try {
+      if (!imagem) {
+        final resultado = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: const ['pdf', 'doc', 'docx'],
+          withData: true,
+        );
+        if (resultado == null || resultado.files.isEmpty) return;
+        final file = resultado.files.first;
+        final bytes = file.bytes;
+        if (bytes == null) throw Exception('Não foi possível ler o arquivo selecionado.');
+        if (bytes.length > kMaxArquivoExperienciaBytes) throw Exception('Arquivo maior que 5 MB.');
+        setState(() {
+          arquivoAtual = ComprovanteArquivo(
+            nome: file.name,
+            extensao: extensaoArquivo(file.name, fallback: file.extension ?? ''),
+            tamanhoBytes: bytes.length,
+            base64: base64Encode(bytes),
+            dataAnexo: DateTime.now(),
+          );
+        });
+        return;
+      }
+
+      final picker = ImagePicker();
+      final foto = await picker.pickImage(source: camera ? ImageSource.camera : ImageSource.gallery, imageQuality: 82);
+      if (foto == null) return;
+      final bytes = await foto.readAsBytes();
+      if (bytes.length > kMaxArquivoExperienciaBytes) throw Exception('Arquivo maior que 5 MB.');
+      final nomeArquivo = foto.name.trim().isEmpty ? 'experiencia_${DateTime.now().millisecondsSinceEpoch}.jpg' : foto.name;
+      setState(() {
+        arquivoAtual = ComprovanteArquivo(
+          nome: nomeArquivo,
+          extensao: extensaoArquivo(nomeArquivo, fallback: 'jpg'),
+          tamanhoBytes: bytes.length,
+          base64: base64Encode(bytes),
+          dataAnexo: DateTime.now(),
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    }
+  }
+
+  Future<void> salvar() async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate()) return;
+    if (salvando) return;
+
+    setState(() => salvando = true);
+    try {
+      final id = widget.initialValue?.id ?? widget.store.nextExperienciaId();
+      var arquivoStorage = arquivoAtual?.toStorageString() ?? '';
+      if (arquivoAtual != null && arquivoAtual!.base64.isNotEmpty) {
+        arquivoStorage = await widget.store.salvarArquivoExperienciaNoSupabase(experienciaId: id, arquivo: arquivoAtual!);
+      }
+
+      final experiencia = ExperienciaFe(
+        id: id,
+        dataRegistro: widget.initialValue?.dataRegistro ?? DateTime.now(),
+        dataExperiencia: tryParseBrDate(dataController.text) ?? DateTime.now(),
+        idPessoa: idPessoa,
+        nome: nome.text.trim(),
+        tipoPessoa: tipoPessoa,
+        jc: kJcPadrao,
+        titulo: titulo.text.trim(),
+        resumo: resumo.text.trim(),
+        categoria: '',
+        tema: tagsSelecionadas.join('|'),
+        status: status,
+        responsavelRegistro: '',
+        observacao: observacao.text.trim(),
+        arquivo: arquivoStorage,
+        foiEnviada: status == 'Pronta' || status == 'Apresentada',
+        aprovada: status == 'Pronta' || status == 'Apresentada',
+        foiApresentada: status == 'Apresentada',
+      );
+
+      await widget.store.upsertExperiencia(experiencia);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    } finally {
+      if (mounted) setState(() => salvando = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return FormScaffold(
-      title: 'Nova experiência',
+      title: widget.isEditing ? 'Editar experiência' : 'Nova experiência',
+      formKey: formKey,
+      onSave: salvar,
       children: [
-        TextField(controller: nome, decoration: const InputDecoration(labelText: 'Nome')),
+        FormSectionLabel('Pessoa e identificação'),
+        BrDateFormField(controller: dataController, labelText: 'Data da experiência', onPickDate: selecionarData),
         const SizedBox(height: 12),
-        TextField(controller: titulo, decoration: const InputDecoration(labelText: 'Título')),
+        TextFormField(
+          controller: nome,
+          decoration: InputDecoration(
+            labelText: 'Nome da pessoa',
+            suffixIcon: IconButton(
+              onPressed: widget.store.pessoas.isEmpty ? null : selecionarPessoa,
+              icon: const Icon(Icons.search),
+              tooltip: 'Selecionar da base de pessoas',
+            ),
+          ),
+          onChanged: (value) => setState(() => preencherPessoa(value)),
+          validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o nome da pessoa.' : null,
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: widget.store.pessoas.isEmpty ? null : selecionarPessoa,
+          icon: const Icon(Icons.list_alt_outlined),
+          label: Text('Selecionar da base de pessoas (${widget.store.pessoas.length})'),
+        ),
         const SizedBox(height: 12),
-        TextField(controller: resumo, minLines: 4, maxLines: 8, decoration: const InputDecoration(labelText: 'Resumo')),
+        AppDropdown(value: tipoPessoa, labelText: 'Categoria', items: kTiposPessoaFrequencia, onChanged: (v) => setState(() => tipoPessoa = v)),
+        const SizedBox(height: 20),
+        FormSectionLabel('Conteúdo'),
+        TextFormField(
+          controller: titulo,
+          decoration: const InputDecoration(labelText: 'Título'),
+          validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe o título.' : null,
+        ),
         const SizedBox(height: 12),
-        AppDropdown(value: status, items: const ['Rascunho', 'Em revisão', 'Aprovada', 'Apresentada'], onChanged: (v) => setState(() => status = v)),
+        TextFormField(
+          controller: resumo,
+          minLines: 4,
+          maxLines: 8,
+          decoration: const InputDecoration(labelText: 'Resumo'),
+          validator: (value) => (value?.trim().isEmpty ?? true) ? 'Informe um resumo.' : null,
+        ),
+        const SizedBox(height: 12),
+        AppDropdown(value: status, labelText: 'Status', items: kStatusExperiencia, onChanged: (v) => setState(() => status = v)),
+        const SizedBox(height: 20),
+        FormSectionLabel('Tags'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final tag in kTagsExperiencia)
+              FilterChip(
+                label: Text(tag),
+                selected: tagsSelecionadas.contains(tag),
+                onSelected: (selecionado) {
+                  setState(() {
+                    if (selecionado) {
+                      tagsSelecionadas.add(tag);
+                    } else {
+                      tagsSelecionadas.remove(tag);
+                    }
+                  });
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        ComprovantePickerCard(
+          titulo: 'Arquivo da experiência',
+          descricao: 'Anexe o arquivo principal da experiência em Word ou PDF. Limite inicial: 5 MB por arquivo.',
+          comprovante: arquivoAtual,
+          onPickFile: () => selecionarArquivo(imagem: false),
+          onRemove: arquivoAtual == null ? null : () => setState(() => arquivoAtual = null),
+          fileButtonLabel: 'Word / PDF',
+        ),
+        const SizedBox(height: 12),
+        TextFormField(controller: observacao, minLines: 2, maxLines: 5, decoration: const InputDecoration(labelText: 'Observação')), 
+        if (salvando) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
       ],
-      onSave: () {
-        widget.store.addExperiencia(ExperienciaFe(
-          id: widget.store.nextExperienciaId(),
-          dataRegistro: DateTime.now(),
-          dataExperiencia: DateTime.now(),
-          idPessoa: 0,
-          nome: nome.text.trim(),
-          tipoPessoa: '',
-          jc: kJcPadrao,
-          titulo: titulo.text.trim(),
-          resumo: resumo.text.trim(),
-          categoria: '',
-          tema: '',
-          status: status,
-          responsavelRegistro: '',
-          observacao: '',
-          arquivo: '',
-          foiEnviada: false,
-          aprovada: status == 'Aprovada' || status == 'Apresentada',
-          foiApresentada: status == 'Apresentada',
-        ));
-        Navigator.pop(context);
-      },
     );
   }
 }
@@ -3063,23 +3620,27 @@ class AppStore extends ChangeNotifier {
       final rawReferencias = await supabase.from('referencias').select().order('nome_referencia');
       final rawDonativos = await supabase.from('donativos').select().order('data', ascending: false);
       final rawFrequencias = await supabase.from('frequencias').select().order('data', ascending: false);
+      final rawExperiencias = await supabase.from('experiencias_fe').select().order('data_registro', ascending: false);
 
       final pessoasRemote = rows(rawPessoas).map(Pessoa.fromSupabase).toList();
       final referenciasRemote = rows(rawReferencias).map(ReferenciaNome.fromSupabase).toList();
       final donativosRemote = rows(rawDonativos).map(Donativo.fromSupabase).toList();
       final frequenciasRemote = rows(rawFrequencias).map(Frequencia.fromSupabase).toList();
+      final experienciasRemote = rows(rawExperiencias).map(ExperienciaFe.fromSupabase).toList();
 
-      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty;
+      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty || experienciasRemote.isNotEmpty;
       if (!substituirSomenteSeHouverDados) {
         pessoas = pessoasRemote;
         referencias = referenciasRemote;
         donativos = donativosRemote;
         frequencias = frequenciasRemote;
+        experiencias = experienciasRemote;
       } else if (remotoTemDados) {
         if (pessoasRemote.isNotEmpty) pessoas = pessoasRemote;
         if (referenciasRemote.isNotEmpty) referencias = referenciasRemote;
         if (donativosRemote.isNotEmpty) donativos = donativosRemote;
         if (frequenciasRemote.isNotEmpty) frequencias = frequenciasRemote;
+        if (experienciasRemote.isNotEmpty) experiencias = experienciasRemote;
       }
 
       if (pessoas.isEmpty || referencias.isEmpty) {
@@ -3090,6 +3651,7 @@ class AppStore extends ChangeNotifier {
       await _saveRawList('referencias', referencias, (e) => e.toJson());
       await _saveRawList('donativos', donativos, (e) => e.toJson());
       await _saveRawList('frequencias', frequencias, (e) => e.toJson());
+      await _saveRawList('experiencias', experiencias, (e) => e.toJson());
       statusSupabase = remotoTemDados ? 'Dados carregados do Supabase' : 'Supabase conectado, mantendo base local';
     } catch (e) {
       statusSupabase = 'Erro no Supabase: ${limparMensagemErro(e)}';
@@ -3111,6 +3673,7 @@ class AppStore extends ChangeNotifier {
       if (referencias.isNotEmpty) await supabase.from('referencias').upsert(referencias.map((e) => e.toSupabase()).toList());
       if (donativos.isNotEmpty) await supabase.from('donativos').upsert(donativos.map((e) => e.toSupabase()).toList());
       if (frequencias.isNotEmpty) await supabase.from('frequencias').upsert(frequencias.map((e) => e.toSupabase()).toList());
+      if (experiencias.isNotEmpty) await supabase.from('experiencias_fe').upsert(experiencias.map((e) => e.toSupabase()).toList());
       statusSupabase = 'Dados locais enviados para o Supabase';
     } catch (e) {
       statusSupabase = 'Erro ao enviar: ${limparMensagemErro(e)}';
@@ -3137,6 +3700,43 @@ class AppStore extends ChangeNotifier {
         );
     return comprovante.copyWith(base64: '', path: path).toStorageString();
   }
+
+
+  Future<String> salvarArquivoExperienciaNoSupabase({required int experienciaId, required ComprovanteArquivo arquivo}) async {
+    if (!isAuthenticated || arquivo.base64.isEmpty) return arquivo.toStorageString();
+
+    final bytes = base64Decode(arquivo.base64);
+    final nomeSeguro = sanitizeFileName(arquivo.nome);
+    final agora = DateTime.now();
+    final path = 'experiencias/${agora.year}/${agora.month.toString().padLeft(2, '0')}/$experienciaId/${agora.millisecondsSinceEpoch}_$nomeSeguro';
+    await supabase.storage.from(kExperienciasBucket).uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentTypeForFile(arquivo.nome),
+          ),
+        );
+    return arquivo.copyWith(base64: '', path: path).toStorageString();
+  }
+
+  Future<String> salvarFotoPessoaNoSupabase({required int pessoaId, required ComprovanteArquivo foto}) async {
+    if (!isAuthenticated || foto.base64.isEmpty) return foto.toStorageString();
+
+    final bytes = base64Decode(foto.base64);
+    final nomeSeguro = sanitizeFileName(foto.nome);
+    final path = 'pessoas/$pessoaId/${DateTime.now().millisecondsSinceEpoch}_$nomeSeguro';
+    await supabase.storage.from(kPessoasFotosBucket).uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentTypeForFile(foto.nome),
+          ),
+        );
+    return foto.copyWith(base64: '', path: path).toStorageString();
+  }
+
 
   List<Map<String, dynamic>> rows(dynamic value) {
     if (value is List) {
@@ -3167,8 +3767,15 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addPessoa(Pessoa value) async {
-    pessoas.add(value);
+  Future<void> addPessoa(Pessoa value) => upsertPessoa(value);
+
+  Future<void> upsertPessoa(Pessoa value) async {
+    final index = pessoas.indexWhere((item) => item.idPessoa == value.idPessoa);
+    if (index >= 0) {
+      pessoas[index] = value;
+    } else {
+      pessoas.add(value);
+    }
     if (isAuthenticated) await supabase.from('pessoas').upsert(value.toSupabase());
     await _saveList('pessoas', pessoas, (e) => e.toJson());
   }
@@ -3239,9 +3846,35 @@ class AppStore extends ChangeNotifier {
     });
   }
 
-  Future<void> addExperiencia(ExperienciaFe value) async {
-    experiencias.add(value);
+  Future<void> addExperiencia(ExperienciaFe value) => upsertExperiencia(value);
+
+  Future<void> upsertExperiencia(ExperienciaFe value) async {
+    final index = experiencias.indexWhere((item) => item.id == value.id);
+    if (index >= 0) {
+      experiencias[index] = value;
+    } else {
+      experiencias.add(value);
+    }
+    if (isAuthenticated) await supabase.from('experiencias_fe').upsert(value.toSupabase());
     await _saveList('experiencias', experiencias, (e) => e.toJson());
+  }
+
+  Future<void> deleteExperiencia(int id) async {
+    experiencias.removeWhere((item) => item.id == id);
+    if (isAuthenticated) await supabase.from('experiencias_fe').delete().eq('id', id);
+    await _saveList('experiencias', experiencias, (e) => e.toJson());
+  }
+
+  Future<String?> criarLinkTemporarioExperiencia(ExperienciaFe item) async {
+    final path = item.arquivoExperiencia?.path ?? '';
+    if (path.isEmpty || !isAuthenticated) return null;
+    return supabase.storage.from(kExperienciasBucket).createSignedUrl(path, 60 * 10);
+  }
+
+  Future<String?> criarLinkTemporarioPessoaFoto(Pessoa? pessoa) async {
+    final path = pessoa?.fotoArquivo?.path ?? '';
+    if (path.isEmpty || !isAuthenticated) return null;
+    return supabase.storage.from(kPessoasFotosBucket).createSignedUrl(path, 60 * 10);
   }
 
   Future<void> addReferencia(ReferenciaNome value) async {
@@ -3259,6 +3892,15 @@ class AppStore extends ChangeNotifier {
     final alvo = normalizeText(nome);
     for (final pessoa in pessoas) {
       if (normalizeText(pessoa.nome) == alvo) return pessoa;
+    }
+    return null;
+  }
+
+
+  Pessoa? findPessoaById(int idPessoa) {
+    if (idPessoa <= 0) return null;
+    for (final pessoa in pessoas) {
+      if (pessoa.idPessoa == idPessoa) return pessoa;
     }
     return null;
   }
@@ -3390,7 +4032,7 @@ class AppStore extends ChangeNotifier {
 
 
 class Pessoa {
-  Pessoa({required this.idPessoa, required this.nome, required this.tipoPessoaAtual, required this.primeiraPresenca, required this.ultimaPresenca, required this.qtdPresencas, required this.jc});
+  Pessoa({required this.idPessoa, required this.nome, required this.tipoPessoaAtual, required this.primeiraPresenca, required this.ultimaPresenca, required this.qtdPresencas, required this.jc, this.foto = ''});
   final int idPessoa;
   final String nome;
   final String tipoPessoaAtual;
@@ -3398,6 +4040,22 @@ class Pessoa {
   final DateTime ultimaPresenca;
   final int qtdPresencas;
   final String jc;
+  final String foto;
+
+  ComprovanteArquivo? get fotoArquivo => ComprovanteArquivo.fromStorageString(foto);
+
+  Pessoa copyWith({String? nome, String? tipoPessoaAtual, DateTime? primeiraPresenca, DateTime? ultimaPresenca, int? qtdPresencas, String? jc, String? foto}) {
+    return Pessoa(
+      idPessoa: idPessoa,
+      nome: nome ?? this.nome,
+      tipoPessoaAtual: tipoPessoaAtual ?? this.tipoPessoaAtual,
+      primeiraPresenca: primeiraPresenca ?? this.primeiraPresenca,
+      ultimaPresenca: ultimaPresenca ?? this.ultimaPresenca,
+      qtdPresencas: qtdPresencas ?? this.qtdPresencas,
+      jc: jc ?? this.jc,
+      foto: foto ?? this.foto,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'idPessoa': idPessoa,
@@ -3407,6 +4065,7 @@ class Pessoa {
         'ultimaPresenca': ultimaPresenca.toIso8601String(),
         'qtdPresencas': qtdPresencas,
         'jc': jc,
+        'foto': foto,
       };
 
   factory Pessoa.fromJson(Map<String, dynamic> json) => Pessoa(
@@ -3417,29 +4076,51 @@ class Pessoa {
         ultimaPresenca: parseDate(json['ultimaPresenca']),
         qtdPresencas: json['qtdPresencas'] ?? 0,
         jc: json['jc'] ?? kJcPadrao,
+        foto: json['foto'] ?? '',
       );
 
-  Map<String, dynamic> toSupabase() => {
-        'id_pessoa': idPessoa,
-        'nome': nome,
-        'tipo_pessoa_atual': tipoPessoaAtual,
-        'primeira_presenca': sqlDate(primeiraPresenca),
-        'ultima_presenca': sqlDate(ultimaPresenca),
-        'qtd_presencas': qtdPresencas,
-        'jc': jc,
-      };
+  Map<String, dynamic> toSupabase() {
+    final arquivo = fotoArquivo;
+    return {
+      'id_pessoa': idPessoa,
+      'nome': nome,
+      'tipo_pessoa_atual': tipoPessoaAtual,
+      'primeira_presenca': sqlDate(primeiraPresenca),
+      'ultima_presenca': sqlDate(ultimaPresenca),
+      'qtd_presencas': qtdPresencas,
+      'jc': jc,
+      'foto_path': arquivo?.path ?? '',
+      'foto_nome': arquivo?.nome ?? '',
+      'foto_tipo': arquivo == null ? '' : contentTypeForFile(arquivo.nome),
+    };
+  }
 
-  factory Pessoa.fromSupabase(Map<String, dynamic> json) => Pessoa(
-        idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
-        nome: (json['nome'] ?? '').toString(),
-        tipoPessoaAtual: (json['tipo_pessoa_atual'] ?? '').toString(),
-        primeiraPresenca: parseDate(json['primeira_presenca']),
-        ultimaPresenca: parseDate(json['ultima_presenca']),
-        qtdPresencas: json['qtd_presencas'] is num ? (json['qtd_presencas'] as num).toInt() : 0,
-        jc: (json['jc'] ?? kJcPadrao).toString(),
-      );
+  factory Pessoa.fromSupabase(Map<String, dynamic> json) {
+    final fotoPath = (json['foto_path'] ?? '').toString();
+    final fotoNome = (json['foto_nome'] ?? '').toString();
+    final foto = fotoPath.isEmpty
+        ? ''
+        : ComprovanteArquivo(
+            nome: fotoNome.isEmpty ? fotoPath.split('/').last : fotoNome,
+            extensao: extensaoArquivo(fotoNome.isEmpty ? fotoPath : fotoNome),
+            tamanhoBytes: 0,
+            base64: '',
+            dataAnexo: DateTime.now(),
+            path: fotoPath,
+          ).toStorageString();
+
+    return Pessoa(
+      idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+      nome: (json['nome'] ?? '').toString(),
+      tipoPessoaAtual: (json['tipo_pessoa_atual'] ?? '').toString(),
+      primeiraPresenca: parseDate(json['primeira_presenca']),
+      ultimaPresenca: parseDate(json['ultima_presenca']),
+      qtdPresencas: json['qtd_presencas'] is num ? (json['qtd_presencas'] as num).toInt() : 0,
+      jc: (json['jc'] ?? kJcPadrao).toString(),
+      foto: foto,
+    );
+  }
 }
-
 
 class ComprovanteArquivo {
   ComprovanteArquivo({required this.nome, required this.extensao, required this.tamanhoBytes, required this.base64, required this.dataAnexo, this.path = ''});
@@ -3725,6 +4406,7 @@ class Frequencia {
   }
 }
 
+
 class ExperienciaFe {
   ExperienciaFe({required this.id, required this.dataRegistro, required this.dataExperiencia, required this.idPessoa, required this.nome, required this.tipoPessoa, required this.jc, required this.titulo, required this.resumo, required this.categoria, required this.tema, required this.status, required this.responsavelRegistro, required this.observacao, required this.arquivo, required this.foiEnviada, required this.aprovada, required this.foiApresentada});
   final int id;
@@ -3745,6 +4427,15 @@ class ExperienciaFe {
   final bool foiEnviada;
   final bool aprovada;
   final bool foiApresentada;
+
+  List<String> get tags => tema
+      .split('|')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  ComprovanteArquivo? get arquivoExperiencia => ComprovanteArquivo.fromStorageString(arquivo);
+  bool get temArquivo => arquivoExperiencia != null;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -3768,25 +4459,86 @@ class ExperienciaFe {
       };
 
   factory ExperienciaFe.fromJson(Map<String, dynamic> json) => ExperienciaFe(
-        id: json['id'] ?? 0,
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
         dataRegistro: parseDate(json['dataRegistro']),
         dataExperiencia: parseDate(json['dataExperiencia']),
-        idPessoa: json['idPessoa'] ?? 0,
-        nome: json['nome'] ?? '',
-        tipoPessoa: json['tipoPessoa'] ?? '',
-        jc: json['jc'] ?? kJcPadrao,
-        titulo: json['titulo'] ?? '',
-        resumo: json['resumo'] ?? '',
-        categoria: json['categoria'] ?? '',
-        tema: json['tema'] ?? '',
-        status: json['status'] ?? '',
-        responsavelRegistro: json['responsavelRegistro'] ?? '',
-        observacao: json['observacao'] ?? '',
-        arquivo: json['arquivo'] ?? '',
-        foiEnviada: json['foiEnviada'] ?? false,
-        aprovada: json['aprovada'] ?? false,
-        foiApresentada: json['foiApresentada'] ?? false,
+        idPessoa: json['idPessoa'] is num ? (json['idPessoa'] as num).toInt() : 0,
+        nome: (json['nome'] ?? '').toString(),
+        tipoPessoa: (json['tipoPessoa'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+        titulo: (json['titulo'] ?? '').toString(),
+        resumo: (json['resumo'] ?? '').toString(),
+        categoria: (json['categoria'] ?? '').toString(),
+        tema: (json['tema'] ?? '').toString(),
+        status: (json['status'] ?? 'Em produção').toString(),
+        responsavelRegistro: (json['responsavelRegistro'] ?? '').toString(),
+        observacao: (json['observacao'] ?? '').toString(),
+        arquivo: (json['arquivo'] ?? '').toString(),
+        foiEnviada: json['foiEnviada'] is bool ? json['foiEnviada'] as bool : false,
+        aprovada: json['aprovada'] is bool ? json['aprovada'] as bool : false,
+        foiApresentada: json['foiApresentada'] is bool ? json['foiApresentada'] as bool : false,
       );
+
+  Map<String, dynamic> toSupabase() {
+    final arquivoAtual = arquivoExperiencia;
+    return {
+      'id': id,
+      'data_registro': dataRegistro.toIso8601String(),
+      'data_experiencia': sqlDate(dataExperiencia),
+      'id_pessoa': idPessoa == 0 ? null : idPessoa,
+      'nome': nome,
+      'tipo_pessoa': tipoPessoa,
+      'jc': jc,
+      'titulo': titulo,
+      'resumo': resumo,
+      'tags': tema,
+      'status': status,
+      'observacao': observacao,
+      'arquivo_path': arquivoAtual?.path ?? '',
+      'arquivo_nome': arquivoAtual?.nome ?? '',
+      'arquivo_tipo': arquivoAtual?.extensao ?? '',
+      'foi_enviada': foiEnviada,
+      'aprovada': aprovada,
+      'foi_apresentada': foiApresentada,
+    };
+  }
+
+  factory ExperienciaFe.fromSupabase(Map<String, dynamic> json) {
+    final path = (json['arquivo_path'] ?? '').toString();
+    final nomeArquivo = (json['arquivo_nome'] ?? '').toString();
+    final tipoArquivo = (json['arquivo_tipo'] ?? '').toString();
+    final arquivoJson = path.isEmpty
+        ? ''
+        : ComprovanteArquivo(
+            nome: nomeArquivo.isEmpty ? 'Arquivo da experiência' : nomeArquivo,
+            extensao: tipoArquivo,
+            tamanhoBytes: 0,
+            base64: '',
+            dataAnexo: DateTime.now(),
+            path: path,
+          ).toStorageString();
+
+    return ExperienciaFe(
+      id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+      dataRegistro: parseDate(json['data_registro']),
+      dataExperiencia: parseDate(json['data_experiencia']),
+      idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+      nome: (json['nome'] ?? '').toString(),
+      tipoPessoa: (json['tipo_pessoa'] ?? '').toString(),
+      jc: (json['jc'] ?? kJcPadrao).toString(),
+      titulo: (json['titulo'] ?? '').toString(),
+      resumo: (json['resumo'] ?? '').toString(),
+      categoria: '',
+      tema: (json['tags'] ?? '').toString(),
+      status: (json['status'] ?? 'Em produção').toString(),
+      responsavelRegistro: '',
+      observacao: (json['observacao'] ?? '').toString(),
+      arquivo: arquivoJson,
+      foiEnviada: json['foi_enviada'] is bool ? json['foi_enviada'] as bool : false,
+      aprovada: json['aprovada'] is bool ? json['aprovada'] as bool : false,
+      foiApresentada: json['foi_apresentada'] is bool ? json['foi_apresentada'] as bool : false,
+    );
+  }
 }
 
 class ReferenciaNome {
@@ -3977,12 +4729,17 @@ String sanitizeFileName(String raw) {
 }
 
 String contentTypeForFile(String name) {
-  final lower = name.toLowerCase();
+  final lower = name.toLowerCase().trim();
   if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  if (lower.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
   if (lower.endsWith('.heic')) return 'image/heic';
-  return 'image/jpeg';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  return 'application/octet-stream';
 }
 
 String limparMensagemErro(Object error) {
@@ -4116,24 +4873,67 @@ class SearchBox extends StatelessWidget {
 }
 
 
+class PessoaAvatar extends StatelessWidget {
+  const PessoaAvatar({super.key, required this.store, this.pessoa, this.radius = 22, this.fallbackText = ''});
+  final AppStore store;
+  final Pessoa? pessoa;
+  final double radius;
+  final String fallbackText;
+
+  String get iniciais {
+    final base = (pessoa?.nome.trim().isNotEmpty ?? false) ? pessoa!.nome.trim() : fallbackText.trim();
+    if (base.isEmpty) return '?';
+    final partes = base.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (partes.length == 1) return partes.first.characters.first.toUpperCase();
+    return '${partes.first.characters.first}${partes.last.characters.first}'.toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foto = pessoa?.fotoArquivo;
+    Widget fallback() => CircleAvatar(
+          radius: radius,
+          backgroundColor: kSoftGreen,
+          child: Text(iniciais, style: const TextStyle(color: kAccent, fontWeight: FontWeight.w900)),
+        );
+
+    if (foto == null) return fallback();
+    if (foto.base64.isNotEmpty) {
+      return CircleAvatar(radius: radius, backgroundImage: MemoryImage(base64Decode(foto.base64)));
+    }
+    if (foto.path.isEmpty) return fallback();
+
+    return FutureBuilder<String?>(
+      future: store.criarLinkTemporarioPessoaFoto(pessoa),
+      builder: (context, snapshot) {
+        final link = snapshot.data;
+        if (link == null || link.isEmpty) return fallback();
+        return CircleAvatar(radius: radius, backgroundImage: NetworkImage(link));
+      },
+    );
+  }
+}
+
 class ComprovantePickerCard extends StatelessWidget {
   const ComprovantePickerCard({
     super.key,
     required this.comprovante,
-    required this.onTakePhoto,
-    required this.onPickImage,
+    this.onTakePhoto,
+    this.onPickImage,
     required this.onPickFile,
     required this.onRemove,
     this.titulo = 'Comprovante da transferência',
     this.descricao = 'Anexe imagem, PDF ou tire foto do comprovante. No iPhone, você também pode salvar o comprovante do WhatsApp em Fotos/Arquivos e selecionar por aqui.',
+    this.fileButtonLabel = 'Arquivos / PDF',
   });
   final ComprovanteArquivo? comprovante;
-  final VoidCallback onTakePhoto;
-  final VoidCallback onPickImage;
+  final VoidCallback? onTakePhoto;
+  final VoidCallback? onPickImage;
   final VoidCallback onPickFile;
   final VoidCallback? onRemove;
   final String titulo;
   final String descricao;
+  final String fileButtonLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -4186,9 +4986,11 @@ class ComprovantePickerCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton.icon(onPressed: onTakePhoto, icon: const Icon(Icons.photo_camera_outlined), label: const Text('Tirar foto')),
-                OutlinedButton.icon(onPressed: onPickImage, icon: const Icon(Icons.photo_library_outlined), label: const Text('Galeria')),
-                OutlinedButton.icon(onPressed: onPickFile, icon: const Icon(Icons.folder_open_outlined), label: const Text('Arquivos / PDF')),
+                if (onTakePhoto != null)
+                  FilledButton.icon(onPressed: onTakePhoto, icon: const Icon(Icons.photo_camera_outlined), label: const Text('Tirar foto')),
+                if (onPickImage != null)
+                  OutlinedButton.icon(onPressed: onPickImage, icon: const Icon(Icons.photo_library_outlined), label: const Text('Galeria')),
+                OutlinedButton.icon(onPressed: onPickFile, icon: const Icon(Icons.folder_open_outlined), label: Text(fileButtonLabel)),
               ],
             ),
           ],
