@@ -29,3 +29,5 @@ flutter:
     - assets/seed_data.json
     - assets/logo_igreja_messianica.png
     - assets/logo_igreja_messianica_central.png
+    - assets/logo_igreja_messianica_simbolo.png
+    - assets/shinken_project_logo.png

@@ -34,3 +34,17 @@ Observação: foto da pessoa será tratada no cadastro de Pessoas em etapa próp
 ## v11.5.2
 - Adiciona ícone próprio do app/PWA usando a logo existente da Igreja.
 - Atualiza web/manifest.json, favicon e apple-touch-icon.
+
+## v12 — Ensino
+
+Antes de usar o módulo Ensino, rode no Supabase:
+
+```text
+docs/supabase_migration_v12_ensino.sql
+```
+
+Inclui:
+- Cursos: Nível 1, 2, 3, 4 e Pós-Outorga.
+- Turmas atuais 2026/1º.
+- Presença por checklist.
+- Pós-Outorga individual com 6 encontros.

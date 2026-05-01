@@ -174,40 +174,6 @@ class IgrejaLogo extends StatelessWidget {
 }
 
 
-class IgrejaSimbolo extends StatelessWidget {
-  const IgrejaSimbolo({super.key, this.size = 42});
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 9,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Center(
-        child: Image.asset(
-          'assets/logo_igreja_messianica_simbolo.png',
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Icon(Icons.blur_circular_rounded, color: kAccent, size: size * 0.72),
-        ),
-      ),
-    );
-  }
-}
-
 class IgrejaLogoCentral extends StatelessWidget {
   const IgrejaLogoCentral({super.key, this.height = 128});
   final double height;
@@ -405,7 +371,6 @@ class _AutoLogoutShellState extends State<AutoLogoutShell> with WidgetsBindingOb
 }
 
 
-
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.store});
   final AppStore store;
@@ -415,39 +380,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int index = 0;
-
-  void selecionarAba(int novaAba) {
-    setState(() => index = novaAba);
-  }
-
-  void abrirMenuMais() {
-    _scaffoldKey.currentState?.openEndDrawer();
-  }
-
-  void abrirPerfil() {
-    showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Fechar perfil',
-      barrierColor: Colors.black.withValues(alpha: 0.18),
-      transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: ContaSistemaPanel(store: widget.store),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
-          child: child,
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -455,48 +388,25 @@ class _MainShellState extends State<MainShell> {
       DashboardPage(store: widget.store),
       DonativosPage(store: widget.store),
       FrequenciaPage(store: widget.store),
-      EnsinoPage(store: widget.store),
-      ExperienciasPage(store: widget.store),
+      PessoasPage(store: widget.store),
+      MaisPage(store: widget.store),
     ];
 
     return Scaffold(
-      key: _scaffoldKey,
-      endDrawer: MenuSistemaDrawer(store: widget.store),
-      endDrawerEnableOpenDragGesture: true,
       appBar: AppBar(
-        toolbarHeight: 92,
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        title: Column(
+        toolbarHeight: 82,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              'assets/logo_igreja_messianica_central.png',
-              height: 38,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const IgrejaLogo(height: 34),
-            ),
-            const SizedBox(height: 6),
-            const Text(
+            IgrejaLogo(height: 44),
+            SizedBox(height: 2),
+            Text(
               kJcPadrao,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: kAccent),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kAccent),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Minha conta',
-            onPressed: abrirPerfil,
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
-          IconButton(
-            tooltip: 'Menu',
-            onPressed: abrirMenuMais,
-            icon: const Icon(Icons.menu_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: SafeArea(child: pages[index]),
       bottomNavigationBar: NavigationBar(
@@ -506,264 +416,10 @@ class _MainShellState extends State<MainShell> {
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Painel'),
           NavigationDestination(icon: Icon(Icons.volunteer_activism_outlined), selectedIcon: Icon(Icons.volunteer_activism), label: 'Donativos'),
           NavigationDestination(icon: Icon(Icons.event_available_outlined), selectedIcon: Icon(Icons.event_available), label: 'Frequência'),
-          NavigationDestination(icon: Icon(Icons.school_outlined), selectedIcon: Icon(Icons.school), label: 'Ensino'),
-          NavigationDestination(icon: Icon(Icons.auto_stories_outlined), selectedIcon: Icon(Icons.auto_stories), label: 'Experiências'),
+          NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt), label: 'Pessoas'),
+          NavigationDestination(icon: Icon(Icons.apps_outlined), selectedIcon: Icon(Icons.apps), label: 'Mais'),
         ],
       ),
-    );
-  }
-}
-
-class MenuSistemaDrawer extends StatelessWidget {
-  const MenuSistemaDrawer({super.key, required this.store});
-  final AppStore store;
-
-  void _abrirPagina(BuildContext context, Widget page) {
-    Navigator.of(context).pop();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      kNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => page));
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final largura = MediaQuery.sizeOf(context).width;
-    final larguraMenu = largura < 430 ? largura * 0.86 : 360.0;
-
-    return SizedBox(
-      width: larguraMenu,
-      child: Drawer(
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.horizontal(left: Radius.circular(26)),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 12, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('Menu', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                          SizedBox(height: 2),
-                          Text(kJcPadrao, style: TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Fechar',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
-                  children: [
-                    MenuTile(
-                      icon: Icons.account_balance_outlined,
-                      title: 'Depósito JC',
-                      subtitle: 'Transferências pendentes para lançar no site.',
-                      onTap: () => _abrirPagina(context, DepositoJcPage(store: store)),
-                    ),
-                    MenuTile(
-                      icon: Icons.people_alt_outlined,
-                      title: 'Pessoas',
-                      subtitle: '${store.pessoas.length} pessoa(s) cadastrada(s)',
-                      onTap: () => _abrirPagina(
-                        context,
-                        ModulePageShell(title: 'Pessoas', child: PessoasPage(store: store)),
-                      ),
-                    ),
-                    MenuTile(
-                      icon: Icons.link,
-                      title: 'Referências',
-                      subtitle: '${store.referencias.length} referência(s)',
-                      onTap: () => _abrirPagina(context, ReferenciasPage(store: store)),
-                    ),
-                    MenuTile(
-                      icon: Icons.alternate_email,
-                      title: 'Online',
-                      subtitle: 'Oficial acumulado e identificados',
-                      onTap: () => _abrirPagina(context, OnlinePage(store: store)),
-                    ),
-                    MenuTile(
-                      icon: Icons.settings,
-                      title: 'Configurações',
-                      subtitle: 'JC fixo, atualização e conta.',
-                      onTap: () => _abrirPagina(context, ConfigPage(store: store)),
-                    ),
-                    MenuTile(
-                      icon: Icons.account_circle_outlined,
-                      title: 'Minha Conta',
-                      subtitle: 'Usuário, permissões e sair.',
-                      onTap: () => _abrirPagina(context, MinhaContaPage(store: store)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-
-class ContaSistemaPanel extends StatelessWidget {
-  const ContaSistemaPanel({super.key, required this.store});
-  final AppStore store;
-
-  String get usuarioLogado {
-    final email = Supabase.instance.client.auth.currentUser?.email ?? '';
-    if (email.isEmpty) return 'Usuário logado';
-    final usuario = email.split('@').first;
-    if (usuario.isEmpty) return email;
-    return '${usuario[0].toUpperCase()}${usuario.substring(1)}';
-  }
-
-  Future<void> _sair(BuildContext context) async {
-    await store.logout();
-    if (context.mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final largura = MediaQuery.sizeOf(context).width;
-    final larguraMenu = largura < 430 ? largura * 0.86 : 360.0;
-
-    return Material(
-      color: Colors.transparent,
-      child: SizedBox(
-        width: larguraMenu,
-        child: Drawer(
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(26)),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 12, 8),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Minha Conta', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                            SizedBox(height: 2),
-                            Text(kJcPadrao, style: TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Fechar',
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-                    children: [
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const CircleAvatar(
-                                    radius: 28,
-                                    backgroundColor: kSoftGreen,
-                                    child: Icon(Icons.person, color: kAccent),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(usuarioLogado, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                                        const SizedBox(height: 2),
-                                        const Text('Perfil: Admin', style: TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              const Text('Permissões', style: TextStyle(fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 8),
-                              const Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  Chip(label: Text('Donativos')),
-                                  Chip(label: Text('Frequência')),
-                                  Chip(label: Text('Ensino')),
-                                  Chip(label: Text('Experiências')),
-                                  Chip(label: Text('Pessoas')),
-                                  Chip(label: Text('Configurações')),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Controle de permissões detalhadas será ativado em uma próxima etapa. Por enquanto, este usuário está com acesso total.',
-                                style: TextStyle(color: Colors.black54),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Card(
-                        child: ListTile(
-                          leading: Icon(Icons.lock_clock_outlined),
-                          title: Text('Bloqueio automático'),
-                          subtitle: Text('Após 15 minutos sem uso, o app volta para o login.'),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () => _sair(context),
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Sair da conta'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ModulePageShell extends StatelessWidget {
-  const ModulePageShell({super.key, required this.title, required this.child});
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(child: child),
     );
   }
 }
@@ -1511,10 +1167,10 @@ class MaisPage extends StatelessWidget {
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DepositoJcPage(store: store))),
         ),
         MenuTile(
-          icon: Icons.people_alt_outlined,
-          title: 'Pessoas',
-          subtitle: '${store.pessoas.length} pessoa(s) cadastrada(s)',
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PessoasPage(store: store))),
+          icon: Icons.school_outlined,
+          title: 'Ensino',
+          subtitle: '${store.ensinoAlunosEmCurso} aluno(s) em curso • ${store.ensinoTurmasAtivas} turma(s)',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EnsinoPage(store: store))),
         ),
         MenuTile(
           icon: Icons.auto_stories,
@@ -2770,7 +2426,7 @@ class EnsinoTurmaDetalhePage extends StatelessWidget {
                     runSpacing: 8,
                     children: [
                       FilledButton.icon(
-                        onPressed: () => openSheet(context, EnsinoPresencaTurmaPage(store: store, turmaId: turma.id)),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EnsinoPresencaTurmaPage(store: store, turmaId: turma.id))),
                         icon: const Icon(Icons.checklist_outlined),
                         label: const Text('Lançar presença'),
                       ),
@@ -2983,9 +2639,6 @@ class _EnsinoPresencaTurmaPageState extends State<EnsinoPresencaTurmaPage> {
   }
 
   void _carregarExistentes() {
-    for (final aluno in alunos) {
-      presentes[aluno.id] = false;
-    }
     final existentes = widget.store.presencasDaTurmaAula(widget.turmaId, aulaNumero);
     for (final p in existentes) {
       presentes[p.idAluno] = p.presente;
@@ -2995,101 +2648,74 @@ class _EnsinoPresencaTurmaPageState extends State<EnsinoPresencaTurmaPage> {
   Future<void> selecionarData() async {
     final atual = tryParseBrDate(dataController.text) ?? DateTime.now();
     final selecionada = await showDatePicker(context: context, firstDate: DateTime(2020), lastDate: DateTime(2100), initialDate: atual);
-    if (selecionada != null) {
-      setState(() => dataController.text = brDate.format(selecionada));
-    }
+    if (selecionada != null) setState(() => dataController.text = brDate.format(selecionada));
   }
 
   Future<void> salvar() async {
     final t = turma;
-    if (t == null || salvando) {
-      return;
-    }
+    if (t == null || salvando) return;
     setState(() => salvando = true);
     try {
-      await widget.store.salvarPresencasTurma(
-        turma: t,
-        aulaNumero: aulaNumero,
-        data: tryParseBrDate(dataController.text) ?? DateTime.now(),
-        presentes: presentes,
-      );
-      if (!mounted) {
-        return;
-      }
+      await widget.store.salvarPresencasTurma(turma: t, aulaNumero: aulaNumero, data: tryParseBrDate(dataController.text) ?? DateTime.now(), presentes: presentes);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Presenças salvas.')));
-      Navigator.pop(context, true);
+      Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
     } finally {
-      if (mounted) {
-        setState(() => salvando = false);
-      }
+      if (mounted) setState(() => salvando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = turma;
-    if (t == null) {
-      return FormScaffold(
-        title: 'Lançar presença',
-        onSave: () => Navigator.pop(context),
-        children: const [
-          EmptyState(show: true, message: 'Turma não encontrada.'),
-        ],
-      );
-    }
+    if (t == null) return const Scaffold(body: Center(child: Text('Turma não encontrada.')));
     final total = widget.store.totalAulasCurso(t.cursoNome);
-    return FormScaffold(
-      title: 'Lançar presença',
-      onSave: salvar,
-      children: [
-        Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(t.nomeTurma, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Text('${t.cursoNome} • ${alunos.length} aluno(s)', style: const TextStyle(color: Colors.black54)),
-                const SizedBox(height: 12),
-                AppDropdown(
-                  value: '$aulaNumero',
-                  labelText: 'Aula',
-                  items: [for (var i = 1; i <= total; i++) '$i'],
-                  onChanged: (v) => setState(() {
-                    aulaNumero = int.tryParse(v) ?? 1;
-                    _carregarExistentes();
-                  }),
-                ),
-                const SizedBox(height: 12),
-                BrDateFormField(controller: dataController, labelText: 'Data da aula', onPickDate: selecionarData),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SectionTitle('Checklist • Aula $aulaNumero de $total'),
-        for (final aluno in alunos)
+    return Scaffold(
+      appBar: AppBar(title: const Text('Lançar presença')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
           Card(
-            child: SwitchListTile(
-              value: presentes[aluno.id] ?? false,
-              onChanged: (v) => setState(() => presentes[aluno.id] = v),
-              title: Text(aluno.nomePessoa, style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text(t.cursoNome),
-              secondary: PessoaAvatar(store: widget.store, pessoa: widget.store.findPessoaById(aluno.idPessoa), fallbackText: aluno.nomePessoa),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.nomeTurma, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    value: '$aulaNumero',
+                    labelText: 'Aula',
+                    items: [for (var i = 1; i <= total; i++) '$i'],
+                    onChanged: (v) => setState(() {
+                      aulaNumero = int.tryParse(v) ?? 1;
+                      _carregarExistentes();
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  BrDateFormField(controller: dataController, labelText: 'Data da aula', onPickDate: selecionarData),
+                ],
+              ),
             ),
           ),
-        EmptyState(show: alunos.isEmpty, message: 'Nenhum aluno nesta turma.'),
-        if (salvando) ...[
+          const SizedBox(height: 16),
+          SectionTitle('Presença • Aula $aulaNumero de $total'),
+          for (final aluno in alunos)
+            Card(
+              child: SwitchListTile(
+                value: presentes[aluno.id] ?? false,
+                onChanged: (v) => setState(() => presentes[aluno.id] = v),
+                title: Text(aluno.nomePessoa, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text(widget.store.findTurmaById(aluno.idTurma)?.cursoNome ?? ''),
+                secondary: PessoaAvatar(store: widget.store, pessoa: widget.store.findPessoaById(aluno.idPessoa), fallbackText: aluno.nomePessoa),
+              ),
+            ),
           const SizedBox(height: 12),
-          const LinearProgressIndicator(),
+          FilledButton.icon(onPressed: salvando ? null : salvar, icon: const Icon(Icons.save_outlined), label: const Text('Salvar presença da aula')),
         ],
-      ],
+      ),
     );
   }
 }
@@ -3333,98 +2959,6 @@ class _PosOutorgaEncontroFormState extends State<PosOutorgaEncontroForm> {
   }
 }
 
-
-
-class MinhaContaPage extends StatelessWidget {
-  const MinhaContaPage({super.key, required this.store});
-  final AppStore store;
-
-  String get usuarioLogado {
-    final email = Supabase.instance.client.auth.currentUser?.email ?? '';
-    if (email.isEmpty) return 'Usuário logado';
-    final usuario = email.split('@').first;
-    if (usuario.isEmpty) return email;
-    return '${usuario[0].toUpperCase()}${usuario.substring(1)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Minha Conta')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 28,
-                        backgroundColor: kSoftGreen,
-                        child: Icon(Icons.person, color: kAccent),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(usuarioLogado, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 2),
-                            const Text('Perfil: Admin', style: TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  const Text('Permissões', style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  const Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      Chip(label: Text('Donativos')),
-                      Chip(label: Text('Frequência')),
-                      Chip(label: Text('Ensino')),
-                      Chip(label: Text('Experiências')),
-                      Chip(label: Text('Pessoas')),
-                      Chip(label: Text('Configurações')),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Controle de permissões detalhadas será ativado em uma próxima etapa. Por enquanto, este usuário está com acesso total.',
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.lock_clock_outlined),
-              title: const Text('Bloqueio automático'),
-              subtitle: const Text('Após 15 minutos sem uso, o app volta para o login.'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () async {
-              await store.logout();
-              if (context.mounted) Navigator.pop(context);
-            },
-            icon: const Icon(Icons.logout),
-            label: const Text('Sair da conta'),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class ConfigPage extends StatelessWidget {
   const ConfigPage({super.key, required this.store});
