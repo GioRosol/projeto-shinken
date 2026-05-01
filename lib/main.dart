@@ -21,8 +21,10 @@ const kSupabasePublishableKey = 'sb_publishable_nwJNB7j7JB3Qwka7PpiHzA_a0XHrJbT'
 const kComprovantesBucket = 'comprovantes';
 const kExperienciasBucket = 'experiencias-fe';
 const kPessoasFotosBucket = 'pessoas-fotos';
+const kJohvensFotosBucket = 'johvens-fotos';
 const kMaxArquivoExperienciaBytes = 5 * 1024 * 1024;
 const kMaxFotoPessoaBytes = 2 * 1024 * 1024;
+const kMaxFotoJohvemAtividadeBytes = 4 * 1024 * 1024;
 const kLoginDominioInterno = 'projetoshinken.local';
 const kTempoBloqueioPadrao = Duration(minutes: 15);
 
@@ -56,6 +58,9 @@ const kCursosEnsinoPadrao = {
 const kStatusTurmaEnsino = ['Em andamento', 'Concluída', 'Pausada'];
 const kStatusAlunoEnsino = ['Em andamento', 'Concluído', 'Pausado', 'Desistente'];
 const kStatusPosOutorga = ['Pendente', 'Em andamento', 'Concluído', 'Pausado'];
+const kTotalAulasJohvem3 = 20;
+const kStatusAlunoJohvem = ['Em andamento', 'Concluído', 'Pausado', 'Desistente'];
+const kTiposAtividadeJohvem = ['Dedicação', 'Reunião', 'Culto', 'Vivência', 'Visita', 'Ação missionária', 'Estudo', 'Evento'];
 
 String usuarioParaEmailInterno(String usuario) {
   final valor = usuario.trim();
@@ -594,6 +599,12 @@ class MenuSistemaDrawer extends StatelessWidget {
                       onTap: () => _abrirPagina(context, OnlinePage(store: store)),
                     ),
                     MenuTile(
+                      icon: Icons.groups_2_outlined,
+                      title: 'Johvens',
+                      subtitle: '${store.johvensAutomaticos.length} johvem(ns) de 12 a 35 anos',
+                      onTap: () => _abrirPagina(context, JohvensPage(store: store)),
+                    ),
+                    MenuTile(
                       icon: Icons.settings,
                       title: 'Configurações',
                       subtitle: 'JC fixo, atualização e conta.',
@@ -716,6 +727,7 @@ class ContaSistemaPanel extends StatelessWidget {
                                   Chip(label: Text('Frequência')),
                                   Chip(label: Text('Ensino')),
                                   Chip(label: Text('Experiências')),
+                                  Chip(label: Text('Johvens')),
                                   Chip(label: Text('Pessoas')),
                                   Chip(label: Text('Configurações')),
                                 ],
@@ -803,6 +815,13 @@ class DashboardPage extends StatelessWidget {
               subtitle: '${store.ensinoTurmasAtivas} turma(s) ativa(s)',
               icon: Icons.school_outlined,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EnsinoPage(store: store))),
+            ),
+            KpiCard(
+              title: 'Johvens',
+              value: '${store.johvensAutomaticos.length}',
+              subtitle: '${store.johvem3AlunosEmCurso} no Johvem 3',
+              icon: Icons.groups_2_outlined,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => JohvensPage(store: store))),
             ),
           ],
         ),
@@ -2613,6 +2632,551 @@ class _OnlineIdentificadoFormState extends State<OnlineIdentificadoForm> {
           onRemove: comprovanteAtual == null ? null : () => setState(() => comprovanteAtual = null),
         ),
       ],
+    );
+  }
+}
+
+
+class JohvensPage extends StatelessWidget {
+  const JohvensPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Johvens')),
+      body: DefaultTabController(
+        length: 3,
+        child: Column(
+          children: [
+            const TabBar(
+              tabs: [
+                Tab(text: 'Lista'),
+                Tab(text: 'Johvem 3'),
+                Tab(text: 'Atividades'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  JohvensListaTab(store: store),
+                  Johvem3Tab(store: store),
+                  JohvemAtividadesTab(store: store),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class JohvensListaTab extends StatefulWidget {
+  const JohvensListaTab({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<JohvensListaTab> createState() => _JohvensListaTabState();
+}
+
+class _JohvensListaTabState extends State<JohvensListaTab> {
+  String busca = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final lista = widget.store.johvensAutomaticos.where((p) {
+      final texto = normalizeText('${p.nome} ${p.codigoMembro} ${p.tipoPessoaAtual} ${p.tipoOutorga}');
+      return texto.contains(normalizeText(busca));
+    }).toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        GridView.count(
+          crossAxisCount: MediaQuery.sizeOf(context).width > 700 ? 4 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.35,
+          children: [
+            KpiCard(title: 'Johvens', value: '${widget.store.johvensAutomaticos.length}', icon: Icons.groups_2_outlined),
+            KpiCard(title: 'Membros', value: '${widget.store.johvensMembros}', icon: Icons.verified_user_outlined),
+            KpiCard(title: 'Johvem 3', value: '${widget.store.johvem3AlunosEmCurso}', subtitle: 'em curso', icon: Icons.school_outlined),
+            KpiCard(title: 'Atividades', value: '${widget.store.johvemAtividades.length}', icon: Icons.photo_library_outlined),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SearchBox(onChanged: (v) => setState(() => busca = v), hintText: 'Buscar johvem por nome, código ou tipo'),
+        const SizedBox(height: 12),
+        for (final pessoa in lista)
+          Card(
+            child: ListTile(
+              leading: PessoaAvatar(store: widget.store, pessoa: pessoa, radius: 24, fallbackText: pessoa.nome),
+              title: Text(pessoa.nome, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text([
+                '${widget.store.idadePessoa(pessoa)} anos',
+                pessoa.tipoPessoaAtual,
+                if (pessoa.codigoMembro.isNotEmpty) 'Cód. ${pessoa.codigoMembro}',
+                if (pessoa.tipoOutorga.isNotEmpty) pessoa.tipoOutorga,
+              ].join(' • ')),
+            ),
+          ),
+        if (lista.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text('Nenhum johvem encontrado'),
+              subtitle: Text('O app calcula automaticamente pessoas de 12 a 35 anos com data de nascimento cadastrada.'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class Johvem3Tab extends StatelessWidget {
+  const Johvem3Tab({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final alunos = [...store.johvem3Alunos]..sort((a, b) => normalizeText(a.nomePessoa).compareTo(normalizeText(b.nomePessoa)));
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Curso Johvem 3', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 4),
+                const Text('20 aulas • controle por checklist de presença'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => openSheet(context, Johvem3PresencaForm(store: store)),
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: const Text('Lançar presença'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => openSheet(context, Johvem3AlunoForm(store: store)),
+                      icon: const Icon(Icons.person_add_alt_1_outlined),
+                      label: const Text('Adicionar aluna/o'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final aluno in alunos)
+          Card(
+            child: ListTile(
+              leading: PessoaAvatar(store: store, pessoa: store.findPessoaById(aluno.idPessoa), radius: 24, fallbackText: aluno.nomePessoa),
+              title: Text(aluno.nomePessoa, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('${aluno.progressoAulas}/$kTotalAulasJohvem3 aulas • ${aluno.status}'),
+              trailing: SizedBox(
+                width: 76,
+                child: LinearProgressIndicator(
+                  value: kTotalAulasJohvem3 == 0 ? 0 : aluno.progressoAulas / kTotalAulasJohvem3,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
+        if (alunos.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.school_outlined),
+              title: Text('Nenhum aluno no Johvem 3'),
+              subtitle: Text('Adicione as alunas atuais para começar o controle de presença.'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class Johvem3AlunoForm extends StatefulWidget {
+  const Johvem3AlunoForm({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<Johvem3AlunoForm> createState() => _Johvem3AlunoFormState();
+}
+
+class _Johvem3AlunoFormState extends State<Johvem3AlunoForm> {
+  String nome = '';
+  String status = 'Em andamento';
+
+  @override
+  void initState() {
+    super.initState();
+    final opcoes = widget.store.johvensAutomaticos.map((e) => e.nome).toList()..sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
+    nome = opcoes.isEmpty ? '' : opcoes.first;
+  }
+
+  Future<void> salvar() async {
+    final pessoa = widget.store.findPessoaByName(nome);
+    if (pessoa == null) throw Exception('Pessoa não encontrada.');
+    await widget.store.upsertJohvem3Aluno(Johvem3Aluno(
+      id: widget.store.nextJohvem3AlunoId(),
+      idPessoa: pessoa.idPessoa,
+      codigoMembro: pessoa.codigoMembro,
+      nomePessoa: pessoa.nome,
+      status: status,
+      progressoAulas: 0,
+      jc: kJcPadrao,
+    ));
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final opcoes = widget.store.johvensAutomaticos.map((e) => e.nome).toList()..sort((a, b) => normalizeText(a).compareTo(normalizeText(b)));
+    return FormScaffold(
+      title: 'Adicionar ao Johvem 3',
+      onSave: salvar,
+      children: [
+        AppDropdown(value: nome, labelText: 'Johvem', items: opcoes, onChanged: (v) => setState(() => nome = v)),
+        const SizedBox(height: 12),
+        AppDropdown(value: status, labelText: 'Status', items: kStatusAlunoJohvem, onChanged: (v) => setState(() => status = v)),
+      ],
+    );
+  }
+}
+
+class Johvem3PresencaForm extends StatefulWidget {
+  const Johvem3PresencaForm({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<Johvem3PresencaForm> createState() => _Johvem3PresencaFormState();
+}
+
+class _Johvem3PresencaFormState extends State<Johvem3PresencaForm> {
+  int aulaNumero = 1;
+  DateTime data = DateTime.now();
+  final presentes = <int, bool>{};
+
+  @override
+  void initState() {
+    super.initState();
+    aulaNumero = (widget.store.johvem3Presencas.map((p) => p.aulaNumero).fold<int>(0, (a, b) => a > b ? a : b) + 1).clamp(1, kTotalAulasJohvem3).toInt();
+    for (final aluno in widget.store.johvem3Alunos) {
+      final ja = widget.store.johvem3Presencas.where((p) => p.idAluno == aluno.id && p.aulaNumero == aulaNumero).toList();
+      presentes[aluno.id] = ja.isNotEmpty ? ja.first.presente : true;
+    }
+  }
+
+  Future<void> salvar() async {
+    await widget.store.salvarPresencasJohvem3(aulaNumero: aulaNumero, data: data, presentes: presentes);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final alunos = [...widget.store.johvem3Alunos]..sort((a, b) => normalizeText(a.nomePessoa).compareTo(normalizeText(b.nomePessoa)));
+    return FormScaffold(
+      title: 'Presença Johvem 3',
+      onSave: salvar,
+      children: [
+        AppDropdown(
+          value: aulaNumero.toString(),
+          labelText: 'Aula',
+          items: List.generate(kTotalAulasJohvem3, (i) => '${i + 1}'),
+          onChanged: (v) => setState(() => aulaNumero = int.tryParse(v) ?? 1),
+        ),
+        DateSelector(label: 'Data da aula', value: data, onChanged: (v) => setState(() => data = v)),
+        const SizedBox(height: 8),
+        const Text('Presença', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        for (final aluno in alunos)
+          CheckboxListTile(
+            value: presentes[aluno.id] ?? true,
+            onChanged: (v) => setState(() => presentes[aluno.id] = v ?? false),
+            title: Text(aluno.nomePessoa),
+            subtitle: Text('${aluno.progressoAulas}/$kTotalAulasJohvem3 aulas'),
+          ),
+        if (alunos.isEmpty) const Text('Adicione alunos antes de lançar presença.'),
+      ],
+    );
+  }
+}
+
+class JohvemAtividadesTab extends StatelessWidget {
+  const JohvemAtividadesTab({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final atividades = [...store.johvemAtividades]..sort((a, b) => b.data.compareTo(a.data));
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        FilledButton.icon(
+          onPressed: () => openSheet(context, JohvemAtividadeForm(store: store)),
+          icon: const Icon(Icons.add_a_photo_outlined),
+          label: const Text('Registrar atividade'),
+        ),
+        const SizedBox(height: 12),
+        for (final atividade in atividades) JohvemAtividadeCard(store: store, atividade: atividade),
+        if (atividades.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.event_note_outlined),
+              title: Text('Nenhuma atividade registrada'),
+              subtitle: Text('Registre dedicações, reuniões, vivências e ações dos Johvens.'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class JohvemAtividadeCard extends StatelessWidget {
+  const JohvemAtividadeCard({super.key, required this.store, required this.atividade});
+  final AppStore store;
+  final JohvemAtividade atividade;
+
+  @override
+  Widget build(BuildContext context) {
+    final participantes = store.participantesAtividade(atividade.id);
+    final fotos = store.fotosAtividade(atividade.id);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(atividade.titulo, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                      const SizedBox(height: 2),
+                      Text('${atividade.tipo} • ${brDate.format(atividade.data)}'),
+                    ],
+                  ),
+                ),
+                Chip(label: Text('${participantes.length} part.')),
+              ],
+            ),
+            if (atividade.descricao.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(atividade.descricao),
+            ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in participantes.take(4)) Chip(label: Text(p.nomePessoa)),
+                if (participantes.length > 4) Chip(label: Text('+${participantes.length - 4}')),
+              ],
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: fotos.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => JohvemFotosPage(store: store, atividade: atividade))),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text(fotos.isEmpty ? 'Sem fotos' : 'Ver fotos (${fotos.length})'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class JohvemAtividadeForm extends StatefulWidget {
+  const JohvemAtividadeForm({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<JohvemAtividadeForm> createState() => _JohvemAtividadeFormState();
+}
+
+class _JohvemAtividadeFormState extends State<JohvemAtividadeForm> {
+  String tipo = kTiposAtividadeJohvem.first;
+  DateTime data = DateTime.now();
+  final titulo = TextEditingController();
+  final descricao = TextEditingController();
+  final responsavel = TextEditingController();
+  final participantes = <int, bool>{};
+  final fotos = <ComprovanteArquivo>[];
+
+  @override
+  void initState() {
+    super.initState();
+    for (final pessoa in widget.store.johvensAutomaticos) {
+      participantes[pessoa.idPessoa] = false;
+    }
+  }
+
+  Future<void> escolherFoto({required ImageSource source}) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 78, maxWidth: 1600);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > kMaxFotoJohvemAtividadeBytes) throw Exception('Foto maior que 4 MB.');
+    setState(() {
+      fotos.add(ComprovanteArquivo(
+        nome: picked.name,
+        extensao: extensaoArquivo(picked.name, fallback: 'jpg'),
+        tamanhoBytes: bytes.length,
+        base64: base64Encode(bytes),
+        dataAnexo: DateTime.now(),
+      ));
+    });
+  }
+
+  Future<void> salvar() async {
+    if (titulo.text.trim().isEmpty) throw Exception('Informe o título da atividade.');
+    final id = widget.store.nextJohvemAtividadeId();
+    final atividade = JohvemAtividade(
+      id: id,
+      data: data,
+      tipo: tipo,
+      titulo: titulo.text.trim(),
+      descricao: descricao.text.trim(),
+      responsavel: responsavel.text.trim(),
+      jc: kJcPadrao,
+      createdAt: DateTime.now(),
+    );
+    await widget.store.upsertJohvemAtividade(atividade);
+
+    final selecionados = widget.store.johvensAutomaticos.where((p) => participantes[p.idPessoa] ?? false).toList();
+    var pid = widget.store.nextJohvemAtividadeParticipanteId();
+    final parts = <JohvemAtividadeParticipante>[];
+    for (final pessoa in selecionados) {
+      parts.add(JohvemAtividadeParticipante(
+        id: pid++,
+        idAtividade: id,
+        idPessoa: pessoa.idPessoa,
+        codigoMembro: pessoa.codigoMembro,
+        nomePessoa: pessoa.nome,
+        presente: true,
+        jc: kJcPadrao,
+      ));
+    }
+    await widget.store.salvarParticipantesAtividade(idAtividade: id, participantes: parts);
+
+    var fid = widget.store.nextJohvemAtividadeFotoId();
+    final fotosAtividade = fotos.map((foto) => JohvemAtividadeFoto(
+          id: fid++,
+          idAtividade: id,
+          arquivo: foto.toStorageString(),
+          legenda: '',
+          jc: kJcPadrao,
+        )).toList();
+    await widget.store.salvarFotosAtividade(idAtividade: id, fotos: fotosAtividade);
+
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final johvens = widget.store.johvensAutomaticos;
+    return FormScaffold(
+      title: 'Registrar atividade Johvem',
+      onSave: salvar,
+      children: [
+        AppDropdown(value: tipo, labelText: 'Tipo de atividade', items: kTiposAtividadeJohvem, onChanged: (v) => setState(() => tipo = v)),
+        DateSelector(label: 'Data', value: data, onChanged: (v) => setState(() => data = v)),
+        TextField(controller: titulo, decoration: const InputDecoration(labelText: 'Título')), 
+        const SizedBox(height: 12),
+        TextField(controller: responsavel, decoration: const InputDecoration(labelText: 'Responsável')), 
+        const SizedBox(height: 12),
+        TextField(controller: descricao, minLines: 3, maxLines: 5, decoration: const InputDecoration(labelText: 'Descrição/observação')), 
+        const SizedBox(height: 16),
+        const Text('Participantes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        for (final pessoa in johvens)
+          CheckboxListTile(
+            value: participantes[pessoa.idPessoa] ?? false,
+            onChanged: (v) => setState(() => participantes[pessoa.idPessoa] = v ?? false),
+            title: Text(pessoa.nome),
+            subtitle: Text('${widget.store.idadePessoa(pessoa)} anos • ${pessoa.tipoPessoaAtual}'),
+          ),
+        const SizedBox(height: 16),
+        const Text('Fotos da atividade', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(onPressed: () => escolherFoto(source: ImageSource.camera), icon: const Icon(Icons.photo_camera_outlined), label: const Text('Tirar foto')),
+            OutlinedButton.icon(onPressed: () => escolherFoto(source: ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: const Text('Galeria')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final foto in fotos)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.image_outlined),
+            title: Text(foto.nome),
+            subtitle: Text(foto.tamanhoFormatado),
+            trailing: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => setState(() => fotos.remove(foto)),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class JohvemFotosPage extends StatelessWidget {
+  const JohvemFotosPage({super.key, required this.store, required this.atividade});
+  final AppStore store;
+  final JohvemAtividade atividade;
+
+  @override
+  Widget build(BuildContext context) {
+    final fotos = store.fotosAtividade(atividade.id);
+    return Scaffold(
+      appBar: AppBar(title: Text('Fotos - ${atividade.titulo}')),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12),
+        itemCount: fotos.length,
+        itemBuilder: (context, index) {
+          final foto = fotos[index];
+          return FutureBuilder<String?>(
+            future: store.criarLinkTemporarioJohvemFoto(foto),
+            builder: (context, snapshot) {
+              final link = snapshot.data;
+              Widget child;
+              if (foto.arquivoFoto?.base64.isNotEmpty ?? false) {
+                child = Image.memory(base64Decode(foto.arquivoFoto!.base64), fit: BoxFit.cover);
+              } else if (link != null && link.isNotEmpty) {
+                child = Image.network(link, fit: BoxFit.cover);
+              } else {
+                child = const Center(child: Icon(Icons.image_outlined, size: 44));
+              }
+              return InkWell(
+                onTap: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    insetPadding: const EdgeInsets.all(16),
+                    child: InteractiveViewer(child: child),
+                  ),
+                ),
+                child: ClipRRect(borderRadius: BorderRadius.circular(18), child: child),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -4994,6 +5558,11 @@ class AppStore extends ChangeNotifier {
   List<EnsinoPresenca> ensinoPresencas = [];
   List<EnsinoPosOutorga> ensinoPosOutorgas = [];
   List<EnsinoPosOutorgaEncontro> ensinoPosOutorgaEncontros = [];
+  List<Johvem3Aluno> johvem3Alunos = [];
+  List<Johvem3Presenca> johvem3Presencas = [];
+  List<JohvemAtividade> johvemAtividades = [];
+  List<JohvemAtividadeParticipante> johvemAtividadeParticipantes = [];
+  List<JohvemAtividadeFoto> johvemAtividadeFotos = [];
 
   static const _seedImportedKey = 'seed_excel_importado_v1';
 
@@ -5011,9 +5580,14 @@ class AppStore extends ChangeNotifier {
     ensinoPresencas = _loadList('ensino_presencas', EnsinoPresenca.fromJson);
     ensinoPosOutorgas = _loadList('ensino_pos_outorga', EnsinoPosOutorga.fromJson);
     ensinoPosOutorgaEncontros = _loadList('ensino_pos_outorga_encontros', EnsinoPosOutorgaEncontro.fromJson);
+    johvem3Alunos = _loadList('johvem3_alunos', Johvem3Aluno.fromJson);
+    johvem3Presencas = _loadList('johvem3_presencas', Johvem3Presenca.fromJson);
+    johvemAtividades = _loadList('johvem_atividades', JohvemAtividade.fromJson);
+    johvemAtividadeParticipantes = _loadList('johvem_atividade_participantes', JohvemAtividadeParticipante.fromJson);
+    johvemAtividadeFotos = _loadList('johvem_atividade_fotos', JohvemAtividadeFoto.fromJson);
 
     final jaImportouSeed = prefs.getBool(_seedImportedKey) ?? false;
-    final bancoLocalVazio = pessoas.isEmpty && donativos.isEmpty && frequencias.isEmpty && experiencias.isEmpty && referencias.isEmpty && onlineIdentificacoes.isEmpty && ensinoTurmas.isEmpty;
+    final bancoLocalVazio = pessoas.isEmpty && donativos.isEmpty && frequencias.isEmpty && experiencias.isEmpty && referencias.isEmpty && onlineIdentificacoes.isEmpty && ensinoTurmas.isEmpty && johvemAtividades.isEmpty;
 
     if (!jaImportouSeed && bancoLocalVazio) {
       await importarDadosDoExcel(notificar: false);
@@ -5023,6 +5597,8 @@ class AppStore extends ChangeNotifier {
     if (isAuthenticated) {
       await carregarDadosDoSupabase(substituirSomenteSeHouverDados: true);
     }
+
+    await garantirJohvem3InicialLocal();
 
     isLoading = false;
     notifyListeners();
@@ -5105,8 +5681,9 @@ class AppStore extends ChangeNotifier {
       final frequenciasRemote = rows(rawFrequencias).map(Frequencia.fromSupabase).toList();
       final experienciasRemote = rows(rawExperiencias).map(ExperienciaFe.fromSupabase).toList();
       await _carregarEnsinoDoSupabaseSeguro();
+      await _carregarJohvensDoSupabaseSeguro();
 
-      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty || experienciasRemote.isNotEmpty || ensinoTurmas.isNotEmpty || ensinoPosOutorgas.isNotEmpty;
+      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty || experienciasRemote.isNotEmpty || ensinoTurmas.isNotEmpty || ensinoPosOutorgas.isNotEmpty || johvemAtividades.isNotEmpty || johvem3Alunos.isNotEmpty;
       if (!substituirSomenteSeHouverDados) {
         pessoas = pessoasRemote;
         referencias = referenciasRemote;
@@ -5131,6 +5708,7 @@ class AppStore extends ChangeNotifier {
       await _saveRawList('frequencias', frequencias, (e) => e.toJson());
       await _saveRawList('experiencias', experiencias, (e) => e.toJson());
       await _saveEnsinoLocal();
+      await _saveJohvensLocal();
       statusSupabase = remotoTemDados ? 'Dados carregados do Supabase' : 'Supabase conectado, mantendo base local';
     } catch (e) {
       statusSupabase = 'Erro no Supabase: ${limparMensagemErro(e)}';
@@ -5153,6 +5731,11 @@ class AppStore extends ChangeNotifier {
       if (donativos.isNotEmpty) await supabase.from('donativos').upsert(donativos.map((e) => e.toSupabase()).toList());
       if (frequencias.isNotEmpty) await supabase.from('frequencias').upsert(frequencias.map((e) => e.toSupabase()).toList());
       if (experiencias.isNotEmpty) await supabase.from('experiencias_fe').upsert(experiencias.map((e) => e.toSupabase()).toList());
+      if (johvem3Alunos.isNotEmpty) await supabase.from('johvem3_alunos').upsert(johvem3Alunos.map((e) => e.toSupabase()).toList());
+      if (johvem3Presencas.isNotEmpty) await supabase.from('johvem3_presencas').upsert(johvem3Presencas.map((e) => e.toSupabase()).toList());
+      if (johvemAtividades.isNotEmpty) await supabase.from('johvem_atividades').upsert(johvemAtividades.map((e) => e.toSupabase()).toList());
+      if (johvemAtividadeParticipantes.isNotEmpty) await supabase.from('johvem_atividade_participantes').upsert(johvemAtividadeParticipantes.map((e) => e.toSupabase()).toList());
+      if (johvemAtividadeFotos.isNotEmpty) await supabase.from('johvem_atividade_fotos').upsert(johvemAtividadeFotos.map((e) => e.toSupabase()).toList());
       statusSupabase = 'Dados locais enviados para o Supabase';
     } catch (e) {
       statusSupabase = 'Erro ao enviar: ${limparMensagemErro(e)}';
@@ -5217,6 +5800,30 @@ class AppStore extends ChangeNotifier {
   }
 
 
+  Future<String> salvarFotoJohvemAtividadeNoSupabase({required int atividadeId, required ComprovanteArquivo foto}) async {
+    if (!isAuthenticated || foto.base64.isEmpty) return foto.toStorageString();
+
+    final bytes = base64Decode(foto.base64);
+    final nomeSeguro = sanitizeFileName(foto.nome);
+    final path = 'atividades/$atividadeId/${DateTime.now().millisecondsSinceEpoch}_$nomeSeguro';
+    await supabase.storage.from(kJohvensFotosBucket).uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentTypeForFile(foto.nome),
+          ),
+        );
+    return foto.copyWith(base64: '', path: path).toStorageString();
+  }
+
+  Future<String?> criarLinkTemporarioJohvemFoto(JohvemAtividadeFoto foto) async {
+    final path = foto.arquivoFoto?.path ?? '';
+    if (path.isEmpty || !isAuthenticated) return null;
+    return supabase.storage.from(kJohvensFotosBucket).createSignedUrl(path, 60 * 10);
+  }
+
+
   List<Map<String, dynamic>> rows(dynamic value) {
     if (value is List) {
       return value.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -5251,6 +5858,56 @@ class AppStore extends ChangeNotifier {
     await _saveRawList('ensino_presencas', ensinoPresencas, (e) => e.toJson());
     await _saveRawList('ensino_pos_outorga', ensinoPosOutorgas, (e) => e.toJson());
     await _saveRawList('ensino_pos_outorga_encontros', ensinoPosOutorgaEncontros, (e) => e.toJson());
+  }
+
+
+  Future<void> _carregarJohvensDoSupabaseSeguro() async {
+    try {
+      final rawAlunos = await supabase.from('johvem3_alunos').select().order('nome_pessoa');
+      final rawPresencas = await supabase.from('johvem3_presencas').select().order('data', ascending: false);
+      final rawAtividades = await supabase.from('johvem_atividades').select().order('data', ascending: false);
+      final rawParticipantes = await supabase.from('johvem_atividade_participantes').select().order('nome_pessoa');
+      final rawFotos = await supabase.from('johvem_atividade_fotos').select().order('id');
+
+      johvem3Alunos = rows(rawAlunos).map(Johvem3Aluno.fromSupabase).toList();
+      johvem3Presencas = rows(rawPresencas).map(Johvem3Presenca.fromSupabase).toList();
+      johvemAtividades = rows(rawAtividades).map(JohvemAtividade.fromSupabase).toList();
+      johvemAtividadeParticipantes = rows(rawParticipantes).map(JohvemAtividadeParticipante.fromSupabase).toList();
+      johvemAtividadeFotos = rows(rawFotos).map(JohvemAtividadeFoto.fromSupabase).toList();
+    } catch (_) {
+      // As tabelas dos Johvens são criadas pela migration v13. Antes disso, mantemos o app funcionando.
+    }
+  }
+
+  Future<void> _saveJohvensLocal() async {
+    await _saveRawList('johvem3_alunos', johvem3Alunos, (e) => e.toJson());
+    await _saveRawList('johvem3_presencas', johvem3Presencas, (e) => e.toJson());
+    await _saveRawList('johvem_atividades', johvemAtividades, (e) => e.toJson());
+    await _saveRawList('johvem_atividade_participantes', johvemAtividadeParticipantes, (e) => e.toJson());
+    await _saveRawList('johvem_atividade_fotos', johvemAtividadeFotos, (e) => e.toJson());
+  }
+
+  Future<void> garantirJohvem3InicialLocal() async {
+    if (johvem3Alunos.isNotEmpty || pessoas.isEmpty) return;
+    final nomes = [
+      'Ana Carolina Silva Almeida',
+      'Catherine Marcele Fernandez do Espirito Santo Rosolem',
+    ];
+    var id = 1;
+    for (final nome in nomes) {
+      final pessoa = findPessoaByName(nome);
+      if (pessoa == null) continue;
+      johvem3Alunos.add(Johvem3Aluno(
+        id: id++,
+        idPessoa: pessoa.idPessoa,
+        codigoMembro: pessoa.codigoMembro,
+        nomePessoa: pessoa.nome,
+        status: 'Em andamento',
+        progressoAulas: 0,
+        jc: kJcPadrao,
+      ));
+    }
+    if (johvem3Alunos.isNotEmpty) await _saveJohvensLocal();
   }
 
 
@@ -5617,6 +6274,149 @@ class AppStore extends ChangeNotifier {
   int nextPosOutorgaId() => ensinoPosOutorgas.isEmpty ? 1 : ensinoPosOutorgas.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
   int nextPosOutorgaEncontroId() => ensinoPosOutorgaEncontros.isEmpty ? 1 : ensinoPosOutorgaEncontros.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
 
+  int idadePessoa(Pessoa pessoa, {DateTime? referencia}) {
+    final nasc = pessoa.dataNascimento;
+    if (nasc == null) return -1;
+    final hoje = referencia ?? DateTime.now();
+    var idade = hoje.year - nasc.year;
+    final fezAniversario = hoje.month > nasc.month || (hoje.month == nasc.month && hoje.day >= nasc.day);
+    if (!fezAniversario) idade--;
+    return idade;
+  }
+
+  bool pessoaEhJohvem(Pessoa pessoa) {
+    final idade = idadePessoa(pessoa);
+    return idade >= 12 && idade <= 35;
+  }
+
+  List<Pessoa> get johvensAutomaticos {
+    final lista = pessoas.where(pessoaEhJohvem).toList();
+    lista.sort((a, b) => normalizeText(a.nome).compareTo(normalizeText(b.nome)));
+    return lista;
+  }
+
+  int get johvensMembros => johvensAutomaticos.where((p) => normalizeText(p.tipoPessoaAtual) == 'membro').length;
+  int get johvem3AlunosEmCurso => johvem3Alunos.where((a) => a.status == 'Em andamento').length;
+
+  List<Johvem3Presenca> presencasJohvem3Aula(int aulaNumero) {
+    return johvem3Presencas.where((p) => p.aulaNumero == aulaNumero).toList();
+  }
+
+  int progressoJohvem3Aluno(int idAluno) {
+    return johvem3Presencas.where((p) => p.idAluno == idAluno && p.presente).map((p) => p.aulaNumero).toSet().length;
+  }
+
+  List<JohvemAtividadeParticipante> participantesAtividade(int idAtividade) {
+    final lista = johvemAtividadeParticipantes.where((p) => p.idAtividade == idAtividade).toList();
+    lista.sort((a, b) => normalizeText(a.nomePessoa).compareTo(normalizeText(b.nomePessoa)));
+    return lista;
+  }
+
+  List<JohvemAtividadeFoto> fotosAtividade(int idAtividade) {
+    return johvemAtividadeFotos.where((f) => f.idAtividade == idAtividade).toList();
+  }
+
+  Future<void> upsertJohvem3Aluno(Johvem3Aluno value) async {
+    final index = johvem3Alunos.indexWhere((item) => item.id == value.id);
+    if (index >= 0) {
+      johvem3Alunos[index] = value;
+    } else {
+      johvem3Alunos.add(value);
+    }
+    if (isAuthenticated) await supabase.from('johvem3_alunos').upsert(value.toSupabase());
+    await _saveJohvensLocal();
+    notifyListeners();
+  }
+
+  Future<void> salvarPresencasJohvem3({required int aulaNumero, required DateTime data, required Map<int, bool> presentes}) async {
+    final novos = <Johvem3Presenca>[];
+    for (final aluno in johvem3Alunos) {
+      final existente = johvem3Presencas.where((p) => p.idAluno == aluno.id && p.aulaNumero == aulaNumero).toList();
+      final presenca = Johvem3Presenca(
+        id: existente.isNotEmpty ? existente.first.id : nextJohvem3PresencaId() + novos.length,
+        idAluno: aluno.id,
+        idPessoa: aluno.idPessoa,
+        codigoMembro: aluno.codigoMembro,
+        nomePessoa: aluno.nomePessoa,
+        aulaNumero: aulaNumero,
+        data: data,
+        presente: presentes[aluno.id] ?? false,
+        observacao: '',
+        jc: kJcPadrao,
+      );
+      final idx = johvem3Presencas.indexWhere((p) => p.id == presenca.id);
+      if (idx >= 0) {
+        johvem3Presencas[idx] = presenca;
+      } else {
+        johvem3Presencas.add(presenca);
+      }
+      novos.add(presenca);
+    }
+    if (isAuthenticated && novos.isNotEmpty) await supabase.from('johvem3_presencas').upsert(novos.map((e) => e.toSupabase()).toList());
+
+    final atualizados = <Johvem3Aluno>[];
+    for (final aluno in johvem3Alunos) {
+      final progresso = progressoJohvem3Aluno(aluno.id);
+      final atualizado = aluno.copyWith(progressoAulas: progresso, status: progresso >= kTotalAulasJohvem3 ? 'Concluído' : aluno.status);
+      final idx = johvem3Alunos.indexWhere((a) => a.id == aluno.id);
+      if (idx >= 0) johvem3Alunos[idx] = atualizado;
+      atualizados.add(atualizado);
+    }
+    if (isAuthenticated && atualizados.isNotEmpty) await supabase.from('johvem3_alunos').upsert(atualizados.map((e) => e.toSupabase()).toList());
+    await _saveJohvensLocal();
+    notifyListeners();
+  }
+
+  Future<void> upsertJohvemAtividade(JohvemAtividade value) async {
+    final index = johvemAtividades.indexWhere((item) => item.id == value.id);
+    if (index >= 0) {
+      johvemAtividades[index] = value;
+    } else {
+      johvemAtividades.add(value);
+    }
+    if (isAuthenticated) await supabase.from('johvem_atividades').upsert(value.toSupabase());
+    await _saveJohvensLocal();
+    notifyListeners();
+  }
+
+  Future<void> salvarParticipantesAtividade({required int idAtividade, required List<JohvemAtividadeParticipante> participantes}) async {
+    johvemAtividadeParticipantes.removeWhere((p) => p.idAtividade == idAtividade);
+    johvemAtividadeParticipantes.addAll(participantes);
+    if (isAuthenticated) {
+      await supabase.from('johvem_atividade_participantes').delete().eq('id_atividade', idAtividade);
+      if (participantes.isNotEmpty) await supabase.from('johvem_atividade_participantes').upsert(participantes.map((e) => e.toSupabase()).toList());
+    }
+    await _saveJohvensLocal();
+    notifyListeners();
+  }
+
+  Future<void> salvarFotosAtividade({required int idAtividade, required List<JohvemAtividadeFoto> fotos}) async {
+    final salvas = <JohvemAtividadeFoto>[];
+    for (final foto in fotos) {
+      var atualizado = foto;
+      final arquivo = foto.arquivoFoto;
+      if (arquivo != null && arquivo.base64.isNotEmpty) {
+        final storage = await salvarFotoJohvemAtividadeNoSupabase(atividadeId: idAtividade, foto: arquivo);
+        atualizado = foto.copyWith(arquivo: storage);
+      }
+      salvas.add(atualizado);
+    }
+    johvemAtividadeFotos.removeWhere((f) => f.idAtividade == idAtividade);
+    johvemAtividadeFotos.addAll(salvas);
+    if (isAuthenticated) {
+      await supabase.from('johvem_atividade_fotos').delete().eq('id_atividade', idAtividade);
+      if (salvas.isNotEmpty) await supabase.from('johvem_atividade_fotos').upsert(salvas.map((e) => e.toSupabase()).toList());
+    }
+    await _saveJohvensLocal();
+    notifyListeners();
+  }
+
+  int nextJohvem3AlunoId() => johvem3Alunos.isEmpty ? 1 : johvem3Alunos.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+  int nextJohvem3PresencaId() => johvem3Presencas.isEmpty ? 1 : johvem3Presencas.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+  int nextJohvemAtividadeId() => johvemAtividades.isEmpty ? 1 : johvemAtividades.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+  int nextJohvemAtividadeParticipanteId() => johvemAtividadeParticipantes.isEmpty ? 1 : johvemAtividadeParticipantes.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+  int nextJohvemAtividadeFotoId() => johvemAtividadeFotos.isEmpty ? 1 : johvemAtividadeFotos.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
+
   double totalDonativosMes(DateTime date) {
     return totalizarDonativos(donativos.where((d) => d.data.year == date.year && d.data.month == date.month));
   }
@@ -5721,6 +6521,311 @@ class AppStore extends ChangeNotifier {
   }
 }
 
+
+
+class Johvem3Aluno {
+  Johvem3Aluno({required this.id, required this.idPessoa, required this.codigoMembro, required this.nomePessoa, required this.status, required this.progressoAulas, required this.jc});
+  final int id;
+  final int idPessoa;
+  final String codigoMembro;
+  final String nomePessoa;
+  final String status;
+  final int progressoAulas;
+  final String jc;
+
+  Johvem3Aluno copyWith({String? status, int? progressoAulas}) => Johvem3Aluno(
+        id: id,
+        idPessoa: idPessoa,
+        codigoMembro: codigoMembro,
+        nomePessoa: nomePessoa,
+        status: status ?? this.status,
+        progressoAulas: progressoAulas ?? this.progressoAulas,
+        jc: jc,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'idPessoa': idPessoa,
+        'codigoMembro': codigoMembro,
+        'nomePessoa': nomePessoa,
+        'status': status,
+        'progressoAulas': progressoAulas,
+        'jc': jc,
+      };
+
+  factory Johvem3Aluno.fromJson(Map<String, dynamic> json) => Johvem3Aluno(
+        id: json['id'] ?? 0,
+        idPessoa: json['idPessoa'] ?? 0,
+        codigoMembro: (json['codigoMembro'] ?? '').toString(),
+        nomePessoa: (json['nomePessoa'] ?? '').toString(),
+        status: (json['status'] ?? 'Em andamento').toString(),
+        progressoAulas: json['progressoAulas'] is num ? (json['progressoAulas'] as num).toInt() : 0,
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+
+  Map<String, dynamic> toSupabase() => {
+        'id': id,
+        'id_pessoa': idPessoa,
+        'codigo_membro': codigoMembro,
+        'nome_pessoa': nomePessoa,
+        'status': status,
+        'progresso_aulas': progressoAulas,
+        'jc': jc,
+      };
+
+  factory Johvem3Aluno.fromSupabase(Map<String, dynamic> json) => Johvem3Aluno(
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+        idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+        codigoMembro: (json['codigo_membro'] ?? '').toString(),
+        nomePessoa: (json['nome_pessoa'] ?? '').toString(),
+        status: (json['status'] ?? 'Em andamento').toString(),
+        progressoAulas: json['progresso_aulas'] is num ? (json['progresso_aulas'] as num).toInt() : 0,
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+}
+
+class Johvem3Presenca {
+  Johvem3Presenca({required this.id, required this.idAluno, required this.idPessoa, required this.codigoMembro, required this.nomePessoa, required this.aulaNumero, required this.data, required this.presente, required this.observacao, required this.jc});
+  final int id;
+  final int idAluno;
+  final int idPessoa;
+  final String codigoMembro;
+  final String nomePessoa;
+  final int aulaNumero;
+  final DateTime data;
+  final bool presente;
+  final String observacao;
+  final String jc;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'idAluno': idAluno,
+        'idPessoa': idPessoa,
+        'codigoMembro': codigoMembro,
+        'nomePessoa': nomePessoa,
+        'aulaNumero': aulaNumero,
+        'data': data.toIso8601String(),
+        'presente': presente,
+        'observacao': observacao,
+        'jc': jc,
+      };
+
+  factory Johvem3Presenca.fromJson(Map<String, dynamic> json) => Johvem3Presenca(
+        id: json['id'] ?? 0,
+        idAluno: json['idAluno'] ?? 0,
+        idPessoa: json['idPessoa'] ?? 0,
+        codigoMembro: (json['codigoMembro'] ?? '').toString(),
+        nomePessoa: (json['nomePessoa'] ?? '').toString(),
+        aulaNumero: json['aulaNumero'] is num ? (json['aulaNumero'] as num).toInt() : 1,
+        data: parseDate(json['data']),
+        presente: json['presente'] == true,
+        observacao: (json['observacao'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+
+  Map<String, dynamic> toSupabase() => {
+        'id': id,
+        'id_aluno': idAluno,
+        'id_pessoa': idPessoa,
+        'codigo_membro': codigoMembro,
+        'nome_pessoa': nomePessoa,
+        'aula_numero': aulaNumero,
+        'data': sqlDate(data),
+        'presente': presente,
+        'observacao': observacao,
+        'jc': jc,
+      };
+
+  factory Johvem3Presenca.fromSupabase(Map<String, dynamic> json) => Johvem3Presenca(
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+        idAluno: json['id_aluno'] is num ? (json['id_aluno'] as num).toInt() : 0,
+        idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+        codigoMembro: (json['codigo_membro'] ?? '').toString(),
+        nomePessoa: (json['nome_pessoa'] ?? '').toString(),
+        aulaNumero: json['aula_numero'] is num ? (json['aula_numero'] as num).toInt() : 1,
+        data: parseDate(json['data']),
+        presente: json['presente'] == true,
+        observacao: (json['observacao'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+}
+
+class JohvemAtividade {
+  JohvemAtividade({required this.id, required this.data, required this.tipo, required this.titulo, required this.descricao, required this.responsavel, required this.jc, required this.createdAt});
+  final int id;
+  final DateTime data;
+  final String tipo;
+  final String titulo;
+  final String descricao;
+  final String responsavel;
+  final String jc;
+  final DateTime createdAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'data': data.toIso8601String(),
+        'tipo': tipo,
+        'titulo': titulo,
+        'descricao': descricao,
+        'responsavel': responsavel,
+        'jc': jc,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory JohvemAtividade.fromJson(Map<String, dynamic> json) => JohvemAtividade(
+        id: json['id'] ?? 0,
+        data: parseDate(json['data']),
+        tipo: (json['tipo'] ?? '').toString(),
+        titulo: (json['titulo'] ?? '').toString(),
+        descricao: (json['descricao'] ?? '').toString(),
+        responsavel: (json['responsavel'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+        createdAt: parseDate(json['createdAt']),
+      );
+
+  Map<String, dynamic> toSupabase() => {
+        'id': id,
+        'data': sqlDate(data),
+        'tipo': tipo,
+        'titulo': titulo,
+        'descricao': descricao,
+        'responsavel': responsavel,
+        'jc': jc,
+        'created_at': createdAt.toIso8601String(),
+      };
+
+  factory JohvemAtividade.fromSupabase(Map<String, dynamic> json) => JohvemAtividade(
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+        data: parseDate(json['data']),
+        tipo: (json['tipo'] ?? '').toString(),
+        titulo: (json['titulo'] ?? '').toString(),
+        descricao: (json['descricao'] ?? '').toString(),
+        responsavel: (json['responsavel'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+        createdAt: parseDate(json['created_at']),
+      );
+}
+
+class JohvemAtividadeParticipante {
+  JohvemAtividadeParticipante({required this.id, required this.idAtividade, required this.idPessoa, required this.codigoMembro, required this.nomePessoa, required this.presente, required this.jc});
+  final int id;
+  final int idAtividade;
+  final int idPessoa;
+  final String codigoMembro;
+  final String nomePessoa;
+  final bool presente;
+  final String jc;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'idAtividade': idAtividade,
+        'idPessoa': idPessoa,
+        'codigoMembro': codigoMembro,
+        'nomePessoa': nomePessoa,
+        'presente': presente,
+        'jc': jc,
+      };
+
+  factory JohvemAtividadeParticipante.fromJson(Map<String, dynamic> json) => JohvemAtividadeParticipante(
+        id: json['id'] ?? 0,
+        idAtividade: json['idAtividade'] ?? 0,
+        idPessoa: json['idPessoa'] ?? 0,
+        codigoMembro: (json['codigoMembro'] ?? '').toString(),
+        nomePessoa: (json['nomePessoa'] ?? '').toString(),
+        presente: json['presente'] != false,
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+
+  Map<String, dynamic> toSupabase() => {
+        'id': id,
+        'id_atividade': idAtividade,
+        'id_pessoa': idPessoa,
+        'codigo_membro': codigoMembro,
+        'nome_pessoa': nomePessoa,
+        'presente': presente,
+        'jc': jc,
+      };
+
+  factory JohvemAtividadeParticipante.fromSupabase(Map<String, dynamic> json) => JohvemAtividadeParticipante(
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+        idAtividade: json['id_atividade'] is num ? (json['id_atividade'] as num).toInt() : 0,
+        idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+        codigoMembro: (json['codigo_membro'] ?? '').toString(),
+        nomePessoa: (json['nome_pessoa'] ?? '').toString(),
+        presente: json['presente'] != false,
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+}
+
+class JohvemAtividadeFoto {
+  JohvemAtividadeFoto({required this.id, required this.idAtividade, required this.arquivo, required this.legenda, required this.jc});
+  final int id;
+  final int idAtividade;
+  final String arquivo;
+  final String legenda;
+  final String jc;
+
+  ComprovanteArquivo? get arquivoFoto => ComprovanteArquivo.fromStorageString(arquivo);
+
+  JohvemAtividadeFoto copyWith({String? arquivo}) => JohvemAtividadeFoto(
+        id: id,
+        idAtividade: idAtividade,
+        arquivo: arquivo ?? this.arquivo,
+        legenda: legenda,
+        jc: jc,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'idAtividade': idAtividade,
+        'arquivo': arquivo,
+        'legenda': legenda,
+        'jc': jc,
+      };
+
+  factory JohvemAtividadeFoto.fromJson(Map<String, dynamic> json) => JohvemAtividadeFoto(
+        id: json['id'] ?? 0,
+        idAtividade: json['idAtividade'] ?? 0,
+        arquivo: (json['arquivo'] ?? '').toString(),
+        legenda: (json['legenda'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+      );
+
+  Map<String, dynamic> toSupabase() {
+    final foto = arquivoFoto;
+    return {
+      'id': id,
+      'id_atividade': idAtividade,
+      'arquivo_path': foto?.path ?? '',
+      'arquivo_nome': foto?.nome ?? '',
+      'arquivo_tipo': foto == null ? '' : contentTypeForFile(foto.nome),
+      'legenda': legenda,
+      'jc': jc,
+    };
+  }
+
+  factory JohvemAtividadeFoto.fromSupabase(Map<String, dynamic> json) {
+    final path = (json['arquivo_path'] ?? '').toString();
+    final nome = (json['arquivo_nome'] ?? '').toString();
+    final arquivo = path.isEmpty
+        ? ''
+        : ComprovanteArquivo(
+            nome: nome.isEmpty ? path.split('/').last : nome,
+            extensao: extensaoArquivo(nome.isEmpty ? path : nome),
+            tamanhoBytes: 0,
+            base64: '',
+            dataAnexo: DateTime.now(),
+            path: path,
+          ).toStorageString();
+    return JohvemAtividadeFoto(
+      id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+      idAtividade: json['id_atividade'] is num ? (json['id_atividade'] as num).toInt() : 0,
+      arquivo: arquivo,
+      legenda: (json['legenda'] ?? '').toString(),
+      jc: (json['jc'] ?? kJcPadrao).toString(),
+    );
+  }
+}
 
 
 class EnsinoCurso {
