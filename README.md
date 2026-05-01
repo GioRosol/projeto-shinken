@@ -29,3 +29,8 @@ Observação: foto da pessoa será tratada no cadastro de Pessoas em etapa próp
 - Tela de login agora usa `Usuário` e `Senha`.
 - Bloqueio automático após 15 minutos de inatividade.
 - Botão Sair continua disponível em Configurações.
+
+
+## v11.5.2
+- Adiciona ícone próprio do app/PWA usando a logo existente da Igreja.
+- Atualiza web/manifest.json, favicon e apple-touch-icon.
