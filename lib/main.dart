@@ -61,6 +61,8 @@ const kStatusPosOutorga = ['Pendente', 'Em andamento', 'Concluído', 'Pausado'];
 const kTotalAulasJohvem3 = 20;
 const kStatusAlunoJohvem = ['Em andamento', 'Concluído', 'Pausado', 'Desistente'];
 const kTiposAtividadeJohvem = ['Dedicação', 'Reunião', 'Culto', 'Vivência', 'Visita', 'Ação missionária', 'Estudo', 'Evento'];
+const kStatusOutorga = ['Em preparo', 'Aguardando outorga', 'Outorgado', 'Aguardando código de membro', 'Não prosseguiu'];
+const kTiposOutorgaPessoa = ['OH', 'SH'];
 
 String usuarioParaEmailInterno(String usuario) {
   final valor = usuario.trim();
@@ -411,6 +413,109 @@ class _AutoLogoutShellState extends State<AutoLogoutShell> with WidgetsBindingOb
 
 
 
+
+class UsuarioPermissoes {
+  const UsuarioPermissoes({
+    required this.login,
+    required this.nome,
+    required this.perfil,
+    required this.ativo,
+    required this.podeDonativos,
+    required this.podeFrequencia,
+    required this.podeEnsino,
+    required this.podeExperiencias,
+    required this.podeOutorgas,
+    required this.podeJohvens,
+    required this.podePessoas,
+    required this.podeConfiguracoes,
+    required this.podeReverter,
+    required this.podeExcluir,
+  });
+
+  final String login;
+  final String nome;
+  final String perfil;
+  final bool ativo;
+  final bool podeDonativos;
+  final bool podeFrequencia;
+  final bool podeEnsino;
+  final bool podeExperiencias;
+  final bool podeOutorgas;
+  final bool podeJohvens;
+  final bool podePessoas;
+  final bool podeConfiguracoes;
+  final bool podeReverter;
+  final bool podeExcluir;
+
+  bool get isAdmin => perfil.toLowerCase() == 'admin' && ativo;
+
+  static UsuarioPermissoes admin({String login = '', String nome = 'Administrador'}) => UsuarioPermissoes(
+        login: login,
+        nome: nome,
+        perfil: 'Admin',
+        ativo: true,
+        podeDonativos: true,
+        podeFrequencia: true,
+        podeEnsino: true,
+        podeExperiencias: true,
+        podeOutorgas: true,
+        podeJohvens: true,
+        podePessoas: true,
+        podeConfiguracoes: true,
+        podeReverter: true,
+        podeExcluir: true,
+      );
+
+  static UsuarioPermissoes consulta({String login = '', String nome = 'Consulta'}) => UsuarioPermissoes(
+        login: login,
+        nome: nome,
+        perfil: 'Consulta',
+        ativo: true,
+        podeDonativos: false,
+        podeFrequencia: false,
+        podeEnsino: true,
+        podeExperiencias: true,
+        podeOutorgas: false,
+        podeJohvens: true,
+        podePessoas: false,
+        podeConfiguracoes: false,
+        podeReverter: false,
+        podeExcluir: false,
+      );
+
+  factory UsuarioPermissoes.fromSupabase(Map<String, dynamic> json, {required String fallbackLogin}) => UsuarioPermissoes(
+        login: (json['login'] ?? fallbackLogin).toString(),
+        nome: (json['nome'] ?? fallbackLogin).toString(),
+        perfil: (json['perfil'] ?? 'Consulta').toString(),
+        ativo: json['ativo'] != false,
+        podeDonativos: json['pode_donativos'] == true,
+        podeFrequencia: json['pode_frequencia'] == true,
+        podeEnsino: json['pode_ensino'] == true,
+        podeExperiencias: json['pode_experiencias'] == true,
+        podeOutorgas: json['pode_outorgas'] == true,
+        podeJohvens: json['pode_johvens'] == true,
+        podePessoas: json['pode_pessoas'] == true,
+        podeConfiguracoes: json['pode_configuracoes'] == true,
+        podeReverter: json['pode_reverter'] == true,
+        podeExcluir: json['pode_excluir'] == true,
+      );
+
+  List<String> permissoesAtivas() {
+    final itens = <String>[];
+    if (podeDonativos) itens.add('Donativos');
+    if (podeFrequencia) itens.add('Frequência');
+    if (podeEnsino) itens.add('Ensino');
+    if (podeExperiencias) itens.add('Experiências');
+    if (podeOutorgas) itens.add('Outorgas');
+    if (podeJohvens) itens.add('Johvens');
+    if (podePessoas) itens.add('Pessoas');
+    if (podeConfiguracoes) itens.add('Configurações');
+    if (podeReverter) itens.add('Reverter');
+    if (podeExcluir) itens.add('Excluir');
+    return itens;
+  }
+}
+
 class MainShell extends StatefulWidget {
   const MainShell({super.key, required this.store});
   final AppStore store;
@@ -599,6 +704,12 @@ class MenuSistemaDrawer extends StatelessWidget {
                       onTap: () => _abrirPagina(context, OnlinePage(store: store)),
                     ),
                     MenuTile(
+                      icon: Icons.workspace_premium_outlined,
+                      title: 'Outorgas',
+                      subtitle: '${store.outorgasMes(DateTime.now())} no mês • ${store.outorgasPendenciaOficial} oficial • ${store.outorgasPendenciaCodigo} código',
+                      onTap: () => _abrirPagina(context, OutorgasPage(store: store)),
+                    ),
+                    MenuTile(
                       icon: Icons.groups_2_outlined,
                       title: 'Johvens',
                       subtitle: '${store.johvensAutomaticos.length} johvem(ns) de 12 a 35 anos',
@@ -710,7 +821,7 @@ class ContaSistemaPanel extends StatelessWidget {
                                       children: [
                                         Text(usuarioLogado, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                                         const SizedBox(height: 2),
-                                        const Text('Perfil: Admin', style: TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
+                                        Text('Perfil: ${store.permissoes.perfil}', style: const TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
                                       ],
                                     ),
                                   ),
@@ -719,23 +830,19 @@ class ContaSistemaPanel extends StatelessWidget {
                               const SizedBox(height: 18),
                               const Text('Permissões', style: TextStyle(fontWeight: FontWeight.w900)),
                               const SizedBox(height: 8),
-                              const Wrap(
+                              Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
-                                  Chip(label: Text('Donativos')),
-                                  Chip(label: Text('Frequência')),
-                                  Chip(label: Text('Ensino')),
-                                  Chip(label: Text('Experiências')),
-                                  Chip(label: Text('Johvens')),
-                                  Chip(label: Text('Pessoas')),
-                                  Chip(label: Text('Configurações')),
+                                  for (final permissao in store.permissoes.permissoesAtivas()) Chip(label: Text(permissao)),
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              const Text(
-                                'Controle de permissões detalhadas será ativado em uma próxima etapa. Por enquanto, este usuário está com acesso total.',
-                                style: TextStyle(color: Colors.black54),
+                              Text(
+                                store.permissoes.isAdmin
+                                    ? 'Administrador: pode editar, excluir e reverter registros sensíveis.'
+                                    : 'Usuário operacional: só acessa as áreas liberadas pelo administrador.',
+                                style: const TextStyle(color: Colors.black54),
                               ),
                             ],
                           ),
@@ -822,6 +929,13 @@ class DashboardPage extends StatelessWidget {
               subtitle: '${store.johvem3AlunosEmCurso} no Johvem 3',
               icon: Icons.groups_2_outlined,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => JohvensPage(store: store))),
+            ),
+            KpiCard(
+              title: 'Outorgas',
+              value: '${store.outorgasMes(DateTime.now())} no mês',
+              subtitle: 'Oficial ${store.outorgasPendenciaOficial} • Código ${store.outorgasPendenciaCodigo} • Cadastro ${store.outorgasPendenciaCadastro}',
+              icon: Icons.workspace_premium_outlined,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OutorgasPage(store: store))),
             ),
           ],
         ),
@@ -2637,6 +2751,419 @@ class _OnlineIdentificadoFormState extends State<OnlineIdentificadoForm> {
 }
 
 
+
+class OutorgasPage extends StatefulWidget {
+  const OutorgasPage({super.key, required this.store});
+  final AppStore store;
+
+  @override
+  State<OutorgasPage> createState() => _OutorgasPageState();
+}
+
+class _OutorgasPageState extends State<OutorgasPage> {
+  String busca = '';
+  String filtro = kFiltroTodos;
+
+  List<OutorgaRegistro> get filtradas {
+    final lista = widget.store.outorgas.where((item) {
+      final texto = normalizeText('${item.nomePessoa} ${item.codigoMembro} ${item.tipoOutorga} ${item.statusOutorga}');
+      if (busca.trim().isNotEmpty && !texto.contains(normalizeText(busca))) return false;
+      if (filtro == 'Oficial pendente' && item.lancadoSistemaOficial) return false;
+      if (filtro == 'Código pendente' && item.codigoMembro.trim().isNotEmpty) return false;
+      if (filtro == 'Cadastro pendente' && !widget.store.outorgaCadastroPendente(item)) return false;
+      if (kStatusOutorga.contains(filtro) && item.statusOutorga != filtro) return false;
+      return true;
+    }).toList();
+    lista.sort((a, b) => b.dataOutorga.compareTo(a.dataOutorga));
+    return lista;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtros = [kFiltroTodos, 'Oficial pendente', 'Código pendente', 'Cadastro pendente', ...kStatusOutorga];
+    return Scaffold(
+      appBar: AppBar(title: const Text('Outorgas')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            children: [
+              Expanded(child: SummaryStatTile(icon: Icons.workspace_premium_outlined, title: 'Outorgas no mês', value: '${widget.store.outorgasMes(DateTime.now())}', subtitle: 'Cadastro oficial de outorga')),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: SummaryStatTile(icon: Icons.fact_check_outlined, title: 'Sistema oficial', value: '${widget.store.outorgasPendenciaOficial}', subtitle: 'pendente(s)')),
+              const SizedBox(width: 10),
+              Expanded(child: SummaryStatTile(icon: Icons.badge_outlined, title: 'Código', value: '${widget.store.outorgasPendenciaCodigo}', subtitle: 'pendente(s)')),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SummaryStatTile(icon: Icons.assignment_late_outlined, title: 'Cadastro completo', value: '${widget.store.outorgasPendenciaCadastro}', subtitle: 'com CPF/RG/endereço/contato pendente'),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: widget.store.permissoes.podeOutorgas ? () => openSheet(context, OutorgaForm(store: widget.store)) : null,
+            icon: const Icon(Icons.add),
+            label: const Text('Nova outorga'),
+          ),
+          const SizedBox(height: 12),
+          SearchBox(onChanged: (v) => setState(() => busca = v), hintText: 'Buscar por nome, código ou status'),
+          const SizedBox(height: 12),
+          AppDropdown(value: filtro, labelText: 'Filtro', items: filtros, onChanged: (v) => setState(() => filtro = v)),
+          const SizedBox(height: 12),
+          for (final item in filtradas) OutorgaCard(store: widget.store, item: item),
+          EmptyState(show: filtradas.isEmpty, message: 'Nenhuma outorga encontrada.'),
+        ],
+      ),
+    );
+  }
+}
+
+class OutorgaCard extends StatelessWidget {
+  const OutorgaCard({super.key, required this.store, required this.item});
+  final AppStore store;
+  final OutorgaRegistro item;
+
+  @override
+  Widget build(BuildContext context) {
+    final pessoa = store.findPessoaById(item.idPessoa);
+    final pendencias = <String>[];
+    if (!item.lancadoSistemaOficial) pendencias.add('Sistema oficial');
+    if (item.codigoMembro.trim().isEmpty) pendencias.add('Código');
+    if (store.outorgaCadastroPendente(item)) pendencias.add('Cadastro');
+
+    return Card(
+      child: ListTile(
+        leading: PessoaAvatar(store: store, pessoa: pessoa, fallbackText: item.nomePessoa),
+        title: Text(item.nomePessoa, style: const TextStyle(fontWeight: FontWeight.w900)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text('${item.tipoOutorga} • ${brDate.format(item.dataOutorga)} • ${item.statusOutorga}'),
+            if (item.codigoMembro.trim().isNotEmpty) Text('Código: ${item.codigoMembro}'),
+            if (pendencias.isNotEmpty) Text('Pendências: ${pendencias.join(' • ')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) async {
+            if (value == 'editar') {
+              openSheet(context, OutorgaForm(store: store, initialValue: item));
+              return;
+            }
+            if (value == 'reverter') {
+              final motivoCtrl = TextEditingController(text: 'Correção feita pelo administrador');
+              final confirmar = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Reverter outorga?'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Esta ação vai tentar voltar ${item.nomePessoa} ao estado anterior salvo no histórico.'),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: motivoCtrl,
+                        decoration: const InputDecoration(labelText: 'Motivo da reversão'),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+                    FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Reverter')),
+                  ],
+                ),
+              );
+              if (confirmar != true) return;
+              try {
+                await store.reverterOutorga(item, motivo: motivoCtrl.text.trim());
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Outorga revertida.')));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+                }
+              }
+            }
+          },
+          itemBuilder: (_) => [
+            if (store.permissoes.podeOutorgas) const PopupMenuItem(value: 'editar', child: Text('Editar')),
+            if (store.podeReverter) const PopupMenuItem(value: 'reverter', child: Text('Reverter outorga')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class OutorgaForm extends StatefulWidget {
+  const OutorgaForm({super.key, required this.store, this.initialValue});
+  final AppStore store;
+  final OutorgaRegistro? initialValue;
+
+  @override
+  State<OutorgaForm> createState() => _OutorgaFormState();
+}
+
+class _OutorgaFormState extends State<OutorgaForm> {
+  final formKey = GlobalKey<FormState>();
+  final nome = TextEditingController();
+  final nascimento = TextEditingController();
+  final cpf = TextEditingController();
+  final rg = TextEditingController();
+  final celular = TextEditingController();
+  final residencial = TextEditingController();
+  final logradouro = TextEditingController();
+  final numero = TextEditingController();
+  final complemento = TextEditingController();
+  final bairro = TextEditingController();
+  final cidade = TextEditingController();
+  final estado = TextEditingController(text: 'MG');
+  final codigoMembro = TextEditingController();
+  final dataOutorga = TextEditingController();
+  final dataOficial = TextEditingController();
+  final responsavel = TextEditingController();
+  final observacao = TextEditingController();
+  String sexo = '';
+  String tipoOutorga = 'OH';
+  String status = 'Outorgado';
+  String possuiSs = '';
+  bool lancadoOficial = false;
+  Pessoa? pessoaSelecionada;
+  bool salvando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.initialValue;
+    if (item != null) {
+      pessoaSelecionada = widget.store.findPessoaById(item.idPessoa) ?? widget.store.findPessoaByName(item.nomePessoa);
+      nome.text = item.nomePessoa;
+      codigoMembro.text = item.codigoMembro;
+      tipoOutorga = valorSeguro(item.tipoOutorga, kTiposOutorgaPessoa, fallback: 'OH');
+      dataOutorga.text = brDate.format(item.dataOutorga);
+      status = valorSeguro(item.statusOutorga, kStatusOutorga, fallback: 'Outorgado');
+      lancadoOficial = item.lancadoSistemaOficial;
+      dataOficial.text = item.dataLancamentoOficial == null ? '' : brDate.format(item.dataLancamentoOficial!);
+      responsavel.text = item.responsavel;
+      observacao.text = item.observacao;
+      _preencherPessoa(pessoaSelecionada, sobrescreverNome: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    nome.dispose();
+    nascimento.dispose();
+    cpf.dispose();
+    rg.dispose();
+    celular.dispose();
+    residencial.dispose();
+    logradouro.dispose();
+    numero.dispose();
+    complemento.dispose();
+    bairro.dispose();
+    cidade.dispose();
+    estado.dispose();
+    codigoMembro.dispose();
+    dataOutorga.dispose();
+    dataOficial.dispose();
+    responsavel.dispose();
+    observacao.dispose();
+    super.dispose();
+  }
+
+  void _preencherPessoa(Pessoa? pessoa, {bool sobrescreverNome = true}) {
+    if (pessoa == null) return;
+    pessoaSelecionada = pessoa;
+    if (sobrescreverNome) nome.text = pessoa.nome;
+    nascimento.text = pessoa.dataNascimento == null ? nascimento.text : brDate.format(pessoa.dataNascimento!);
+    cpf.text = pessoa.cpf.isEmpty ? cpf.text : pessoa.cpf;
+    rg.text = pessoa.rg.isEmpty ? rg.text : pessoa.rg;
+    celular.text = pessoa.telefoneCelular.isEmpty ? celular.text : pessoa.telefoneCelular;
+    residencial.text = pessoa.telefoneResidencial.isEmpty ? residencial.text : pessoa.telefoneResidencial;
+    logradouro.text = pessoa.logradouro.isEmpty ? logradouro.text : pessoa.logradouro;
+    numero.text = pessoa.numero.isEmpty ? numero.text : pessoa.numero;
+    complemento.text = pessoa.complemento.isEmpty ? complemento.text : pessoa.complemento;
+    bairro.text = pessoa.bairro.isEmpty ? bairro.text : pessoa.bairro;
+    cidade.text = pessoa.cidade.isEmpty ? cidade.text : pessoa.cidade;
+    estado.text = pessoa.estado.isEmpty ? estado.text : pessoa.estado;
+    codigoMembro.text = pessoa.codigoMembro.isEmpty ? codigoMembro.text : pessoa.codigoMembro;
+    tipoOutorga = pessoa.tipoOutorga.isEmpty ? tipoOutorga : pessoa.tipoOutorga;
+    dataOutorga.text = pessoa.dataOutorga == null ? dataOutorga.text : brDate.format(pessoa.dataOutorga!);
+    sexo = pessoa.sexo.isEmpty ? sexo : pessoa.sexo;
+    possuiSs = pessoa.possuiSs.isEmpty ? possuiSs : pessoa.possuiSs;
+  }
+
+  Future<void> selecionarPessoa() async {
+    final selecionado = await pickStringFromList(context, title: 'Selecionar pessoa', options: widget.store.nomesPessoas());
+    if (selecionado == null) return;
+    final pessoa = widget.store.findPessoaByName(selecionado);
+    setState(() => _preencherPessoa(pessoa));
+  }
+
+  Future<void> selecionarData(TextEditingController controller) async {
+    final atual = tryParseBrDate(controller.text) ?? DateTime.now();
+    final selecionada = await showDatePicker(context: context, firstDate: DateTime(1900), lastDate: DateTime(2100), initialDate: atual);
+    if (selecionada != null) setState(() => controller.text = brDate.format(selecionada));
+  }
+
+  List<String> pendenciasCadastro() {
+    final pendencias = <String>[];
+    if (sexo.isEmpty) pendencias.add('sexo');
+    if (tryParseBrDate(nascimento.text) == null) pendencias.add('nascimento');
+    if (!validarCpf(cpf.text)) pendencias.add('CPF');
+    if (rg.text.trim().isEmpty) pendencias.add('RG');
+    if (celular.text.trim().isEmpty) pendencias.add('celular');
+    if (logradouro.text.trim().isEmpty) pendencias.add('logradouro');
+    if (numero.text.trim().isEmpty) pendencias.add('nº');
+    if (bairro.text.trim().isEmpty) pendencias.add('bairro');
+    if (cidade.text.trim().isEmpty) pendencias.add('cidade');
+    if (estado.text.trim().isEmpty) pendencias.add('UF');
+    return pendencias;
+  }
+
+  Future<void> salvar() async {
+    final form = formKey.currentState;
+    if (form == null || !form.validate()) return;
+    if (pessoaSelecionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione uma pessoa.')));
+      return;
+    }
+    if (salvando) return;
+    setState(() => salvando = true);
+    try {
+      final pessoa = pessoaSelecionada!;
+      final atualizada = pessoa.copyWith(
+        nome: nome.text.trim(),
+        tipoPessoaAtual: 'Membro',
+        codigoMembro: codigoMembro.text.trim(),
+        sexo: sexo,
+        dataNascimento: tryParseBrDate(nascimento.text),
+        tipoOutorga: tipoOutorga,
+        dataOutorga: tryParseBrDate(dataOutorga.text),
+        situacaoMembro: 'ATI',
+        possuiSs: possuiSs,
+        logradouro: logradouro.text.trim(),
+        numero: numero.text.trim(),
+        complemento: complemento.text.trim(),
+        bairro: bairro.text.trim(),
+        cidade: cidade.text.trim(),
+        estado: estado.text.trim().toUpperCase(),
+        telefoneResidencial: residencial.text.trim(),
+        telefoneCelular: celular.text.trim(),
+        cpf: formatCpf(cpf.text),
+        rg: rg.text.trim(),
+      );
+      final registro = OutorgaRegistro(
+        id: widget.initialValue?.id ?? widget.store.nextOutorgaId(),
+        idPessoa: atualizada.idPessoa,
+        nomePessoa: atualizada.nome,
+        tipoOutorga: tipoOutorga,
+        dataOutorga: tryParseBrDate(dataOutorga.text)!,
+        codigoMembro: codigoMembro.text.trim(),
+        cpf: formatCpf(cpf.text),
+        rg: rg.text.trim(),
+        statusOutorga: status,
+        lancadoSistemaOficial: lancadoOficial,
+        dataLancamentoOficial: tryParseBrDate(dataOficial.text),
+        responsavel: responsavel.text.trim(),
+        observacao: observacao.text.trim(),
+        jc: kJcPadrao,
+        createdAt: widget.initialValue?.createdAt ?? DateTime.now(),
+      );
+      await widget.store.upsertOutorga(registro, pessoaAtualizada: atualizada);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limparMensagemErro(e))));
+    } finally {
+      if (mounted) setState(() => salvando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendencias = pendenciasCadastro();
+    return FormScaffold(
+      title: widget.initialValue == null ? 'Nova outorga' : 'Editar outorga',
+      formKey: formKey,
+      onSave: salvar,
+      children: [
+        const FormSectionLabel('Pessoa'),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: PessoaAvatar(store: widget.store, pessoa: pessoaSelecionada, fallbackText: nome.text),
+          title: Text(nome.text.trim().isEmpty ? 'Selecionar pessoa' : nome.text.trim(), style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(pessoaSelecionada?.descricaoPrincipal ?? 'Escolha uma pessoa da base'),
+          trailing: const Icon(Icons.search),
+          onTap: selecionarPessoa,
+        ),
+        const SizedBox(height: 12),
+        if (pendencias.isNotEmpty)
+          Card(
+            color: const Color(0xFFFFF8E1),
+            child: ListTile(
+              leading: const Icon(Icons.warning_amber_rounded, color: Colors.deepOrange),
+              title: const Text('Cadastro pendente', style: TextStyle(fontWeight: FontWeight.w900)),
+              subtitle: Text('Falta preencher: ${pendencias.join(', ')}'),
+            ),
+          ),
+        const SizedBox(height: 16),
+        const FormSectionLabel('Dados pessoais obrigatórios'),
+        AppDropdown(value: sexo, labelText: 'Sexo', items: const ['', 'F', 'M'], onChanged: (v) => setState(() => sexo = v)),
+        const SizedBox(height: 12),
+        BrDateFormField(controller: nascimento, labelText: 'Nascimento', onPickDate: () => selecionarData(nascimento)),
+        const SizedBox(height: 12),
+        TextFormField(controller: cpf, decoration: const InputDecoration(labelText: 'CPF'), keyboardType: TextInputType.number, inputFormatters: [CpfTextInputFormatter()], validator: (v) => validarCpf(v ?? '') ? null : 'CPF inválido.'),
+        const SizedBox(height: 12),
+        TextFormField(controller: rg, decoration: const InputDecoration(labelText: 'RG'), validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o RG.' : null),
+        const SizedBox(height: 12),
+        TextFormField(controller: celular, decoration: const InputDecoration(labelText: 'Telefone celular'), keyboardType: TextInputType.phone, validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o celular.' : null),
+        const SizedBox(height: 12),
+        TextFormField(controller: residencial, decoration: const InputDecoration(labelText: 'Telefone residencial'), keyboardType: TextInputType.phone),
+        const SizedBox(height: 16),
+        const FormSectionLabel('Endereço'),
+        TextFormField(controller: logradouro, decoration: const InputDecoration(labelText: 'Logradouro'), validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o logradouro.' : null),
+        const SizedBox(height: 12),
+        Row(children: [Expanded(child: TextFormField(controller: numero, decoration: const InputDecoration(labelText: 'Nº'), validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o nº.' : null)), const SizedBox(width: 12), Expanded(child: TextFormField(controller: complemento, decoration: const InputDecoration(labelText: 'Complemento')))]),
+        const SizedBox(height: 12),
+        TextFormField(controller: bairro, decoration: const InputDecoration(labelText: 'Bairro'), validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o bairro.' : null),
+        const SizedBox(height: 12),
+        Row(children: [Expanded(flex: 2, child: TextFormField(controller: cidade, decoration: const InputDecoration(labelText: 'Cidade'), validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe a cidade.' : null)), const SizedBox(width: 12), Expanded(child: TextFormField(controller: estado, decoration: const InputDecoration(labelText: 'UF'), validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe a UF.' : null))]),
+        const SizedBox(height: 16),
+        const FormSectionLabel('Dados da outorga'),
+        AppDropdown(value: tipoOutorga, labelText: 'Tipo de outorga', items: kTiposOutorgaPessoa, onChanged: (v) => setState(() => tipoOutorga = v)),
+        const SizedBox(height: 12),
+        BrDateFormField(controller: dataOutorga, labelText: 'Data da outorga', onPickDate: () => selecionarData(dataOutorga)),
+        const SizedBox(height: 12),
+        TextFormField(controller: codigoMembro, decoration: const InputDecoration(labelText: 'Código de membro')),
+        const SizedBox(height: 12),
+        AppDropdown(value: status, labelText: 'Status da outorga', items: kStatusOutorga, onChanged: (v) => setState(() => status = v)),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: lancadoOficial,
+          onChanged: (v) => setState(() => lancadoOficial = v),
+          title: const Text('Lançado no sistema oficial?'),
+          subtitle: const Text('Pendência própria do módulo Outorgas.'),
+        ),
+        if (lancadoOficial) ...[
+          const SizedBox(height: 12),
+          BrDateFormField(controller: dataOficial, labelText: 'Data do lançamento oficial', onPickDate: () => selecionarData(dataOficial)),
+        ],
+        const SizedBox(height: 12),
+        TextFormField(controller: responsavel, decoration: const InputDecoration(labelText: 'Responsável')),
+        const SizedBox(height: 12),
+        TextFormField(controller: observacao, decoration: const InputDecoration(labelText: 'Observação'), minLines: 2, maxLines: 4),
+      ],
+    );
+  }
+}
+
 class JohvensPage extends StatelessWidget {
   const JohvensPage({super.key, required this.store});
   final AppStore store;
@@ -3938,7 +4465,7 @@ class MinhaContaPage extends StatelessWidget {
                           children: [
                             Text(usuarioLogado, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                             const SizedBox(height: 2),
-                            const Text('Perfil: Admin', style: TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
+                            Text('Perfil: ${store.permissoes.perfil}', style: const TextStyle(color: kAccent, fontWeight: FontWeight.w800)),
                           ],
                         ),
                       ),
@@ -3947,22 +4474,19 @@ class MinhaContaPage extends StatelessWidget {
                   const SizedBox(height: 18),
                   const Text('Permissões', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 8),
-                  const Wrap(
+                  Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      Chip(label: Text('Donativos')),
-                      Chip(label: Text('Frequência')),
-                      Chip(label: Text('Ensino')),
-                      Chip(label: Text('Experiências')),
-                      Chip(label: Text('Pessoas')),
-                      Chip(label: Text('Configurações')),
+                      for (final permissao in store.permissoes.permissoesAtivas()) Chip(label: Text(permissao)),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Controle de permissões detalhadas será ativado em uma próxima etapa. Por enquanto, este usuário está com acesso total.',
-                    style: TextStyle(color: Colors.black54),
+                  Text(
+                    store.permissoes.isAdmin
+                        ? 'Administrador: pode editar, excluir e reverter registros sensíveis.'
+                        : 'Usuário operacional: só acessa as áreas liberadas pelo administrador.',
+                    style: const TextStyle(color: Colors.black54),
                   ),
                 ],
               ),
@@ -4086,6 +4610,8 @@ class _PessoaFormState extends State<PessoaForm> {
   final estado = TextEditingController(text: 'MG');
   final telefoneResidencial = TextEditingController();
   final telefoneCelular = TextEditingController();
+  final cpf = TextEditingController();
+  final rg = TextEditingController();
 
   String tipo = 'Membro';
   String sexo = '';
@@ -4111,6 +4637,8 @@ class _PessoaFormState extends State<PessoaForm> {
     estado.text = item?.estado.isNotEmpty == true ? item!.estado : 'MG';
     telefoneResidencial.text = item?.telefoneResidencial ?? '';
     telefoneCelular.text = item?.telefoneCelular ?? '';
+    cpf.text = item?.cpf ?? '';
+    rg.text = item?.rg ?? '';
     tipo = valorSeguro(item?.tipoPessoaAtual, kTiposPessoaFrequencia, fallback: 'Membro');
     sexo = valorSeguro(item?.sexo, const ['', 'F', 'M'], fallback: '');
     tipoOutorga = valorSeguro(item?.tipoOutorga, const ['', 'OH', 'SH'], fallback: '');
@@ -4133,6 +4661,8 @@ class _PessoaFormState extends State<PessoaForm> {
     estado.dispose();
     telefoneResidencial.dispose();
     telefoneCelular.dispose();
+    cpf.dispose();
+    rg.dispose();
     super.dispose();
   }
 
@@ -4202,6 +4732,8 @@ class _PessoaFormState extends State<PessoaForm> {
         estado: estado.text.trim().toUpperCase(),
         telefoneResidencial: telefoneResidencial.text.trim(),
         telefoneCelular: telefoneCelular.text.trim(),
+        cpf: formatCpf(cpf.text),
+        rg: rg.text.trim(),
       );
 
       await widget.store.upsertPessoa(pessoa);
@@ -4267,6 +4799,20 @@ class _PessoaFormState extends State<PessoaForm> {
           decoration: InputDecoration(labelText: 'Nascimento', suffixIcon: IconButton(icon: const Icon(Icons.calendar_today), onPressed: () => selecionarData(nascimento))),
           inputFormatters: [BrDateTextInputFormatter()],
         ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: cpf,
+          decoration: const InputDecoration(labelText: 'CPF'),
+          keyboardType: TextInputType.number,
+          inputFormatters: [CpfTextInputFormatter()],
+          validator: (value) {
+            final texto = value?.trim() ?? '';
+            if (texto.isEmpty) return null;
+            return validarCpf(texto) ? null : 'CPF inválido.';
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(controller: rg, decoration: const InputDecoration(labelText: 'RG')),
         const SizedBox(height: 20),
         const SectionTitle('Dados de membro'),
         TextFormField(controller: codigoMembro, decoration: const InputDecoration(labelText: 'Código do membro')),
@@ -5542,9 +6088,18 @@ class AppStore extends ChangeNotifier {
   bool isAuthenticated = false;
   bool isSyncing = false;
   String statusSupabase = 'Não conectado';
+  UsuarioPermissoes permissoes = UsuarioPermissoes.consulta();
   late SharedPreferences prefs;
 
   SupabaseClient get supabase => Supabase.instance.client;
+  String get loginAtual {
+    final email = supabase.auth.currentUser?.email ?? '';
+    return email.contains('@') ? email.split('@').first.toLowerCase() : email.toLowerCase();
+  }
+
+  bool get isAdmin => permissoes.isAdmin;
+  bool get podeReverter => permissoes.ativo && permissoes.podeReverter;
+  bool get podeExcluir => permissoes.ativo && permissoes.podeExcluir;
 
   List<Pessoa> pessoas = [];
   List<Donativo> donativos = [];
@@ -5563,6 +6118,7 @@ class AppStore extends ChangeNotifier {
   List<JohvemAtividade> johvemAtividades = [];
   List<JohvemAtividadeParticipante> johvemAtividadeParticipantes = [];
   List<JohvemAtividadeFoto> johvemAtividadeFotos = [];
+  List<OutorgaRegistro> outorgas = [];
 
   static const _seedImportedKey = 'seed_excel_importado_v1';
 
@@ -5585,6 +6141,7 @@ class AppStore extends ChangeNotifier {
     johvemAtividades = _loadList('johvem_atividades', JohvemAtividade.fromJson);
     johvemAtividadeParticipantes = _loadList('johvem_atividade_participantes', JohvemAtividadeParticipante.fromJson);
     johvemAtividadeFotos = _loadList('johvem_atividade_fotos', JohvemAtividadeFoto.fromJson);
+    outorgas = _loadList('outorgas', OutorgaRegistro.fromJson);
 
     final jaImportouSeed = prefs.getBool(_seedImportedKey) ?? false;
     final bancoLocalVazio = pessoas.isEmpty && donativos.isEmpty && frequencias.isEmpty && experiencias.isEmpty && referencias.isEmpty && onlineIdentificacoes.isEmpty && ensinoTurmas.isEmpty && johvemAtividades.isEmpty;
@@ -5658,6 +6215,7 @@ class AppStore extends ChangeNotifier {
   Future<void> logout() async {
     await supabase.auth.signOut();
     isAuthenticated = false;
+    permissoes = UsuarioPermissoes.consulta();
     statusSupabase = 'Desconectado';
     notifyListeners();
   }
@@ -5669,6 +6227,7 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
 
     try {
+      await _carregarPermissoesUsuarioSeguro();
       final rawPessoas = await supabase.from('pessoas').select().order('nome');
       final rawReferencias = await supabase.from('referencias').select().order('nome_referencia');
       final rawDonativos = await supabase.from('donativos').select().order('data', ascending: false);
@@ -5682,8 +6241,9 @@ class AppStore extends ChangeNotifier {
       final experienciasRemote = rows(rawExperiencias).map(ExperienciaFe.fromSupabase).toList();
       await _carregarEnsinoDoSupabaseSeguro();
       await _carregarJohvensDoSupabaseSeguro();
+      await _carregarOutorgasDoSupabaseSeguro();
 
-      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty || experienciasRemote.isNotEmpty || ensinoTurmas.isNotEmpty || ensinoPosOutorgas.isNotEmpty || johvemAtividades.isNotEmpty || johvem3Alunos.isNotEmpty;
+      final remotoTemDados = pessoasRemote.isNotEmpty || referenciasRemote.isNotEmpty || donativosRemote.isNotEmpty || frequenciasRemote.isNotEmpty || experienciasRemote.isNotEmpty || ensinoTurmas.isNotEmpty || ensinoPosOutorgas.isNotEmpty || johvemAtividades.isNotEmpty || johvem3Alunos.isNotEmpty || outorgas.isNotEmpty;
       if (!substituirSomenteSeHouverDados) {
         pessoas = pessoasRemote;
         referencias = referenciasRemote;
@@ -5709,6 +6269,7 @@ class AppStore extends ChangeNotifier {
       await _saveRawList('experiencias', experiencias, (e) => e.toJson());
       await _saveEnsinoLocal();
       await _saveJohvensLocal();
+      await _saveOutorgasLocal();
       statusSupabase = remotoTemDados ? 'Dados carregados do Supabase' : 'Supabase conectado, mantendo base local';
     } catch (e) {
       statusSupabase = 'Erro no Supabase: ${limparMensagemErro(e)}';
@@ -5717,6 +6278,71 @@ class AppStore extends ChangeNotifier {
       isSyncing = false;
       notifyListeners();
     }
+  }
+
+
+  Future<void> _carregarPermissoesUsuarioSeguro() async {
+    final login = loginAtual;
+    if (login.isEmpty) {
+      permissoes = UsuarioPermissoes.consulta();
+      return;
+    }
+
+    try {
+      final raw = await supabase.from('usuarios_permissoes').select().eq('login', login).limit(1);
+      final lista = rows(raw);
+      if (lista.isNotEmpty) {
+        permissoes = UsuarioPermissoes.fromSupabase(lista.first, fallbackLogin: login);
+      } else if (login == 'giovanni' || login == 'admin' || login == 'giorosol') {
+        permissoes = UsuarioPermissoes.admin(login: login, nome: login == 'admin' ? 'Administrador' : 'Giovanni');
+      } else {
+        permissoes = UsuarioPermissoes.consulta(login: login, nome: login);
+      }
+    } catch (_) {
+      // Se a migration de permissões ainda não foi rodada, o Giovanni/admin continuam como administradores para não travar o teste.
+      if (login == 'giovanni' || login == 'admin' || login == 'giorosol') {
+        permissoes = UsuarioPermissoes.admin(login: login, nome: login == 'admin' ? 'Administrador' : 'Giovanni');
+      } else {
+        permissoes = UsuarioPermissoes.consulta(login: login, nome: login);
+      }
+    }
+  }
+
+  Future<void> registrarHistoricoAcao({
+    required String acao,
+    required String modulo,
+    required String registroId,
+    required Map<String, dynamic> dadosAntes,
+    required Map<String, dynamic> dadosDepois,
+    String observacao = '',
+  }) async {
+    if (!isAuthenticated) return;
+    try {
+      await supabase.from('historico_acoes').insert({
+        'usuario_id': supabase.auth.currentUser?.id,
+        'login': loginAtual,
+        'perfil': permissoes.perfil,
+        'acao': acao,
+        'modulo': modulo,
+        'registro_id': registroId,
+        'dados_antes': dadosAntes,
+        'dados_depois': dadosDepois,
+        'observacao': observacao,
+      });
+    } catch (_) {
+      // Histórico não deve impedir o lançamento principal.
+    }
+  }
+
+  Map<String, dynamic>? _mapFromDynamic(dynamic value) {
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String && value.trim().isNotEmpty) {
+      final decoded = jsonDecode(value);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    }
+    return null;
   }
 
   Future<void> enviarDadosLocaisParaSupabase() async {
@@ -5731,6 +6357,7 @@ class AppStore extends ChangeNotifier {
       if (donativos.isNotEmpty) await supabase.from('donativos').upsert(donativos.map((e) => e.toSupabase()).toList());
       if (frequencias.isNotEmpty) await supabase.from('frequencias').upsert(frequencias.map((e) => e.toSupabase()).toList());
       if (experiencias.isNotEmpty) await supabase.from('experiencias_fe').upsert(experiencias.map((e) => e.toSupabase()).toList());
+      if (outorgas.isNotEmpty) await supabase.from('outorgas').upsert(outorgas.map((e) => e.toSupabase()).toList());
       if (johvem3Alunos.isNotEmpty) await supabase.from('johvem3_alunos').upsert(johvem3Alunos.map((e) => e.toSupabase()).toList());
       if (johvem3Presencas.isNotEmpty) await supabase.from('johvem3_presencas').upsert(johvem3Presencas.map((e) => e.toSupabase()).toList());
       if (johvemAtividades.isNotEmpty) await supabase.from('johvem_atividades').upsert(johvemAtividades.map((e) => e.toSupabase()).toList());
@@ -5885,6 +6512,20 @@ class AppStore extends ChangeNotifier {
     await _saveRawList('johvem_atividades', johvemAtividades, (e) => e.toJson());
     await _saveRawList('johvem_atividade_participantes', johvemAtividadeParticipantes, (e) => e.toJson());
     await _saveRawList('johvem_atividade_fotos', johvemAtividadeFotos, (e) => e.toJson());
+  }
+
+  Future<void> _carregarOutorgasDoSupabaseSeguro() async {
+    if (!isAuthenticated) return;
+    try {
+      final raw = await supabase.from('outorgas').select().order('data_outorga', ascending: false);
+      outorgas = rows(raw).map(OutorgaRegistro.fromSupabase).toList();
+    } catch (_) {
+      // A tabela de Outorgas é criada pela migration v14. Antes disso, mantemos o app funcionando.
+    }
+  }
+
+  Future<void> _saveOutorgasLocal() async {
+    await _saveRawList('outorgas', outorgas, (e) => e.toJson());
   }
 
   Future<void> garantirJohvem3InicialLocal() async {
@@ -6121,7 +6762,171 @@ class AppStore extends ChangeNotifier {
   int nextExperienciaId() => experiencias.isEmpty ? 1 : experiencias.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
   int nextOnlineId() => onlineIdentificacoes.isEmpty ? 1 : onlineIdentificacoes.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
   String nextReferenciaId() => 'REF${(referencias.length + 1).toString().padLeft(6, '0')}';
+  int nextOutorgaId() => outorgas.isEmpty ? 1 : outorgas.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
 
+  int outorgasMes(DateTime date) {
+    return outorgas.where((o) => o.dataOutorga.year == date.year && o.dataOutorga.month == date.month && o.statusOutorga != 'Não prosseguiu').length;
+  }
+
+  int get outorgasPendenciaOficial => outorgas.where((o) => o.statusOutorga == 'Outorgado' && !o.lancadoSistemaOficial).length;
+  int get outorgasPendenciaCodigo => outorgas.where((o) => o.statusOutorga == 'Outorgado' && o.codigoMembro.trim().isEmpty).length;
+  int get outorgasPendenciaCadastro => outorgas.where(outorgaCadastroPendente).length;
+
+  bool outorgaCadastroPendente(OutorgaRegistro outorga) {
+    final pessoa = findPessoaById(outorga.idPessoa);
+    if (pessoa == null) return true;
+    return pessoa.sexo.trim().isEmpty ||
+        pessoa.dataNascimento == null ||
+        !validarCpf(pessoa.cpf) ||
+        pessoa.rg.trim().isEmpty ||
+        pessoa.telefoneCelular.trim().isEmpty ||
+        pessoa.logradouro.trim().isEmpty ||
+        pessoa.numero.trim().isEmpty ||
+        pessoa.bairro.trim().isEmpty ||
+        pessoa.cidade.trim().isEmpty ||
+        pessoa.estado.trim().isEmpty;
+  }
+
+  Future<void> upsertOutorga(OutorgaRegistro value, {required Pessoa pessoaAtualizada}) async {
+    final pessoaAntes = findPessoaById(pessoaAtualizada.idPessoa);
+    final outorgaAntesIndex = outorgas.indexWhere((item) => item.id == value.id);
+    final outorgaAntes = outorgaAntesIndex >= 0 ? outorgas[outorgaAntesIndex] : null;
+    EnsinoPosOutorga? posOutorgaAntes;
+    for (final item in ensinoPosOutorgas) {
+      if (item.idPessoa == pessoaAtualizada.idPessoa || (item.codigoMembro.isNotEmpty && item.codigoMembro == pessoaAtualizada.codigoMembro)) {
+        posOutorgaAntes = item;
+        break;
+      }
+    }
+
+    await registrarHistoricoAcao(
+      acao: outorgaAntes == null ? 'criar_outorga' : 'editar_outorga',
+      modulo: 'outorgas',
+      registroId: value.id.toString(),
+      dadosAntes: {
+        'pessoa': pessoaAntes?.toJson(),
+        'outorga': outorgaAntes?.toJson(),
+        'posOutorga': posOutorgaAntes?.toJson(),
+      },
+      dadosDepois: {
+        'pessoa': pessoaAtualizada.toJson(),
+        'outorga': value.toJson(),
+      },
+    );
+
+    await upsertPessoa(pessoaAtualizada);
+
+    final index = outorgas.indexWhere((item) => item.id == value.id);
+    if (index >= 0) {
+      outorgas[index] = value;
+    } else {
+      outorgas.add(value);
+    }
+    if (isAuthenticated) await supabase.from('outorgas').upsert(value.toSupabase());
+
+    final jaExistePos = ensinoPosOutorgas.any((p) => p.idPessoa == pessoaAtualizada.idPessoa || (p.codigoMembro.isNotEmpty && p.codigoMembro == pessoaAtualizada.codigoMembro));
+    if (!jaExistePos && value.statusOutorga == 'Outorgado') {
+      await upsertPosOutorga(EnsinoPosOutorga(
+        id: nextPosOutorgaId(),
+        idPessoa: pessoaAtualizada.idPessoa,
+        codigoMembro: pessoaAtualizada.codigoMembro,
+        nomePessoa: pessoaAtualizada.nome,
+        dataOutorga: value.dataOutorga,
+        status: 'Pendente',
+        responsavel: value.responsavel,
+        observacao: 'Criado automaticamente a partir do cadastro de outorga.',
+        jc: kJcPadrao,
+      ));
+    }
+
+    await _saveOutorgasLocal();
+    notifyListeners();
+  }
+
+
+
+  Future<void> reverterOutorga(OutorgaRegistro value, {required String motivo}) async {
+    if (!podeReverter) {
+      throw Exception('Somente administradores podem reverter outorgas.');
+    }
+    if (!isAuthenticated) {
+      throw Exception('Entre no app antes de reverter.');
+    }
+
+    final raw = await supabase
+        .from('historico_acoes')
+        .select()
+        .eq('modulo', 'outorgas')
+        .eq('registro_id', value.id.toString())
+        .order('created_at', ascending: false)
+        .limit(1);
+    final lista = rows(raw);
+    if (lista.isEmpty) {
+      throw Exception('Não encontrei histórico para reverter esta outorga com segurança.');
+    }
+
+    final dadosAntes = _mapFromDynamic(lista.first['dados_antes']);
+    if (dadosAntes == null) {
+      throw Exception('Histórico inválido. Não foi possível reverter com segurança.');
+    }
+
+    final pessoaAntesMap = _mapFromDynamic(dadosAntes['pessoa']);
+    final outorgaAntesMap = _mapFromDynamic(dadosAntes['outorga']);
+    final posAntesMap = _mapFromDynamic(dadosAntes['posOutorga']);
+
+    if (pessoaAntesMap != null) {
+      await upsertPessoa(Pessoa.fromJson(pessoaAntesMap));
+    }
+
+    if (outorgaAntesMap == null) {
+      outorgas.removeWhere((item) => item.id == value.id);
+      await supabase.from('outorgas').delete().eq('id', value.id);
+    } else {
+      final outorgaRestaurada = OutorgaRegistro.fromJson(outorgaAntesMap);
+      final index = outorgas.indexWhere((item) => item.id == outorgaRestaurada.id);
+      if (index >= 0) {
+        outorgas[index] = outorgaRestaurada;
+      } else {
+        outorgas.add(outorgaRestaurada);
+      }
+      await supabase.from('outorgas').upsert(outorgaRestaurada.toSupabase());
+    }
+
+    final posAtual = ensinoPosOutorgas.where((item) => item.idPessoa == value.idPessoa || (value.codigoMembro.isNotEmpty && item.codigoMembro == value.codigoMembro)).toList();
+    if (posAntesMap == null) {
+      for (final pos in posAtual) {
+        final auto = normalizeText(pos.observacao).contains('criado automaticamente');
+        if (auto || pos.status == 'Pendente') {
+          ensinoPosOutorgaEncontros.removeWhere((encontro) => encontro.idPosOutorga == pos.id);
+          ensinoPosOutorgas.removeWhere((item) => item.id == pos.id);
+          await supabase.from('ensino_pos_outorga_encontros').delete().eq('id_pos_outorga', pos.id);
+          await supabase.from('ensino_pos_outorga').delete().eq('id', pos.id);
+        }
+      }
+    } else {
+      final posRestaurado = EnsinoPosOutorga.fromJson(posAntesMap);
+      final index = ensinoPosOutorgas.indexWhere((item) => item.id == posRestaurado.id);
+      if (index >= 0) {
+        ensinoPosOutorgas[index] = posRestaurado;
+      } else {
+        ensinoPosOutorgas.add(posRestaurado);
+      }
+      await supabase.from('ensino_pos_outorga').upsert(posRestaurado.toSupabase());
+    }
+
+    await registrarHistoricoAcao(
+      acao: 'reverter_outorga',
+      modulo: 'outorgas',
+      registroId: value.id.toString(),
+      dadosAntes: {'outorga': value.toJson()},
+      dadosDepois: {'revertido': true},
+      observacao: motivo,
+    );
+
+    await _saveOutorgasLocal();
+    await _saveEnsinoLocal();
+    notifyListeners();
+  }
 
   int get ensinoAlunosEmCurso => ensinoTurmaAlunos.where((a) => a.status == 'Em andamento').length;
   int get ensinoTurmasAtivas => ensinoTurmas.where((t) => t.status == 'Em andamento').length;
@@ -7224,6 +8029,98 @@ class EnsinoPosOutorgaEncontro {
       );
 }
 
+
+class OutorgaRegistro {
+  OutorgaRegistro({required this.id, required this.idPessoa, required this.nomePessoa, required this.tipoOutorga, required this.dataOutorga, required this.codigoMembro, required this.cpf, required this.rg, required this.statusOutorga, required this.lancadoSistemaOficial, required this.dataLancamentoOficial, required this.responsavel, required this.observacao, required this.jc, required this.createdAt});
+  final int id;
+  final int idPessoa;
+  final String nomePessoa;
+  final String tipoOutorga;
+  final DateTime dataOutorga;
+  final String codigoMembro;
+  final String cpf;
+  final String rg;
+  final String statusOutorga;
+  final bool lancadoSistemaOficial;
+  final DateTime? dataLancamentoOficial;
+  final String responsavel;
+  final String observacao;
+  final String jc;
+  final DateTime createdAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'idPessoa': idPessoa,
+        'nomePessoa': nomePessoa,
+        'tipoOutorga': tipoOutorga,
+        'dataOutorga': dataOutorga.toIso8601String(),
+        'codigoMembro': codigoMembro,
+        'cpf': cpf,
+        'rg': rg,
+        'statusOutorga': statusOutorga,
+        'lancadoSistemaOficial': lancadoSistemaOficial,
+        'dataLancamentoOficial': dataLancamentoOficial?.toIso8601String(),
+        'responsavel': responsavel,
+        'observacao': observacao,
+        'jc': jc,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory OutorgaRegistro.fromJson(Map<String, dynamic> json) => OutorgaRegistro(
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+        idPessoa: json['idPessoa'] is num ? (json['idPessoa'] as num).toInt() : 0,
+        nomePessoa: (json['nomePessoa'] ?? '').toString(),
+        tipoOutorga: (json['tipoOutorga'] ?? 'OH').toString(),
+        dataOutorga: parseDate(json['dataOutorga']),
+        codigoMembro: (json['codigoMembro'] ?? '').toString(),
+        cpf: formatCpf((json['cpf'] ?? '').toString()),
+        rg: (json['rg'] ?? '').toString(),
+        statusOutorga: (json['statusOutorga'] ?? 'Outorgado').toString(),
+        lancadoSistemaOficial: json['lancadoSistemaOficial'] == true,
+        dataLancamentoOficial: parseNullableDate(json['dataLancamentoOficial']),
+        responsavel: (json['responsavel'] ?? '').toString(),
+        observacao: (json['observacao'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+        createdAt: parseDate(json['createdAt']),
+      );
+
+  Map<String, dynamic> toSupabase() => {
+        'id': id,
+        'id_pessoa': idPessoa == 0 ? null : idPessoa,
+        'nome_pessoa': nomePessoa,
+        'tipo_outorga': tipoOutorga,
+        'data_outorga': sqlDate(dataOutorga),
+        'codigo_membro': codigoMembro,
+        'cpf': somenteDigitos(cpf),
+        'rg': rg,
+        'status_outorga': statusOutorga,
+        'lancado_sistema_oficial': lancadoSistemaOficial,
+        'data_lancamento_oficial': dataLancamentoOficial == null ? null : sqlDate(dataLancamentoOficial!),
+        'responsavel': responsavel,
+        'observacao': observacao,
+        'jc': jc,
+        'created_at': createdAt.toIso8601String(),
+      };
+
+  factory OutorgaRegistro.fromSupabase(Map<String, dynamic> json) => OutorgaRegistro(
+        id: json['id'] is num ? (json['id'] as num).toInt() : 0,
+        idPessoa: json['id_pessoa'] is num ? (json['id_pessoa'] as num).toInt() : 0,
+        nomePessoa: (json['nome_pessoa'] ?? '').toString(),
+        tipoOutorga: (json['tipo_outorga'] ?? 'OH').toString(),
+        dataOutorga: parseDate(json['data_outorga']),
+        codigoMembro: (json['codigo_membro'] ?? '').toString(),
+        cpf: formatCpf((json['cpf'] ?? '').toString()),
+        rg: (json['rg'] ?? '').toString(),
+        statusOutorga: (json['status_outorga'] ?? 'Outorgado').toString(),
+        lancadoSistemaOficial: json['lancado_sistema_oficial'] == true,
+        dataLancamentoOficial: parseNullableDate(json['data_lancamento_oficial']),
+        responsavel: (json['responsavel'] ?? '').toString(),
+        observacao: (json['observacao'] ?? '').toString(),
+        jc: (json['jc'] ?? kJcPadrao).toString(),
+        createdAt: parseDate(json['created_at']),
+      );
+}
+
 class Pessoa {
   Pessoa({
     required this.idPessoa,
@@ -7249,6 +8146,8 @@ class Pessoa {
     this.estado = '',
     this.telefoneResidencial = '',
     this.telefoneCelular = '',
+    this.cpf = '',
+    this.rg = '',
   });
 
   final int idPessoa;
@@ -7274,6 +8173,8 @@ class Pessoa {
   final String estado;
   final String telefoneResidencial;
   final String telefoneCelular;
+  final String cpf;
+  final String rg;
 
   ComprovanteArquivo? get fotoArquivo => ComprovanteArquivo.fromStorageString(foto);
 
@@ -7323,6 +8224,8 @@ class Pessoa {
     String? estado,
     String? telefoneResidencial,
     String? telefoneCelular,
+    String? cpf,
+    String? rg,
   }) {
     return Pessoa(
       idPessoa: idPessoa,
@@ -7348,6 +8251,8 @@ class Pessoa {
       estado: estado ?? this.estado,
       telefoneResidencial: telefoneResidencial ?? this.telefoneResidencial,
       telefoneCelular: telefoneCelular ?? this.telefoneCelular,
+      cpf: cpf ?? this.cpf,
+      rg: rg ?? this.rg,
     );
   }
 
@@ -7375,6 +8280,8 @@ class Pessoa {
         'estado': estado,
         'telefoneResidencial': telefoneResidencial,
         'telefoneCelular': telefoneCelular,
+        'cpf': cpf,
+        'rg': rg,
       };
 
   factory Pessoa.fromJson(Map<String, dynamic> json) => Pessoa(
@@ -7401,6 +8308,8 @@ class Pessoa {
         estado: (json['estado'] ?? '').toString(),
         telefoneResidencial: (json['telefoneResidencial'] ?? '').toString(),
         telefoneCelular: (json['telefoneCelular'] ?? '').toString(),
+        cpf: (json['cpf'] ?? '').toString(),
+        rg: (json['rg'] ?? '').toString(),
       );
 
   Map<String, dynamic> toSupabase() {
@@ -7431,6 +8340,8 @@ class Pessoa {
       'estado': estado,
       'telefone_residencial': telefoneResidencial,
       'telefone_celular': telefoneCelular,
+      'cpf': somenteDigitos(cpf),
+      'rg': rg,
     };
   }
 
@@ -7472,6 +8383,8 @@ class Pessoa {
       estado: (json['estado'] ?? '').toString(),
       telefoneResidencial: (json['telefone_residencial'] ?? '').toString(),
       telefoneCelular: (json['telefone_celular'] ?? '').toString(),
+      cpf: formatCpf((json['cpf'] ?? '').toString()),
+      rg: (json['rg'] ?? '').toString(),
     );
   }
 }
@@ -8042,6 +8955,30 @@ String nomeLimpoDeRotuloPessoa(String raw) {
 }
 
 
+
+String somenteDigitos(String raw) => raw.replaceAll(RegExp(r'[^0-9]'), '');
+
+String formatCpf(String raw) {
+  final digits = somenteDigitos(raw);
+  if (digits.length != 11) return raw.trim();
+  return '${digits.substring(0, 3)}.${digits.substring(3, 6)}.${digits.substring(6, 9)}-${digits.substring(9)}';
+}
+
+bool validarCpf(String raw) {
+  final cpf = somenteDigitos(raw);
+  if (cpf.length != 11) return false;
+  if (RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;
+  int calcDigito(int tamanho) {
+    var soma = 0;
+    for (var i = 0; i < tamanho; i++) {
+      soma += int.parse(cpf[i]) * (tamanho + 1 - i);
+    }
+    final resto = (soma * 10) % 11;
+    return resto == 10 ? 0 : resto;
+  }
+  return calcDigito(9) == int.parse(cpf[9]) && calcDigito(10) == int.parse(cpf[10]);
+}
+
 DateTime dateOnly(DateTime value) => DateTime(value.year, value.month, value.day);
 
 double parseValor(String raw) {
@@ -8532,6 +9469,22 @@ class BrDateTextInputFormatter extends TextInputFormatter {
     for (var i = 0; i < digits.length && i < 8; i++) {
       buffer.write(digits[i]);
       if ((i == 1 || i == 3) && i != digits.length - 1) buffer.write('/');
+    }
+    final text = buffer.toString();
+    return TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+  }
+}
+
+
+class CpfTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = somenteDigitos(newValue.text);
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length && i < 11; i++) {
+      buffer.write(digits[i]);
+      if (i == 2 || i == 5) buffer.write('.');
+      if (i == 8) buffer.write('-');
     }
     final text = buffer.toString();
     return TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
